@@ -27,12 +27,15 @@ onMounted(async () => {
 
 <template>
   <div class="container home">
-    <header class="home__hero">
-      <h1>发现知识</h1>
-      <p>阶段一演示 · 数据来自本地 mock</p>
+    <header class="masthead">
+      <p class="masthead__eyebrow">ENCYCLOPEDIA · HOME</p>
+      <h1>词条馆</h1>
+      <p class="masthead__lede">
+        自建知识首页。下列模块来自本地 mock，字段已对齐后续 API 合同。
+      </p>
     </header>
 
-    <p v-if="loading" class="state">正在加载首页…</p>
+    <p v-if="loading" class="state">正在编排首页…</p>
     <p v-else-if="error" class="state state--err">{{ error }}</p>
 
     <template v-else-if="data">
@@ -58,32 +61,49 @@ onMounted(async () => {
 <style scoped>
 .home {
   display: grid;
-  gap: 1rem;
+  gap: 1.35rem;
 }
-.home__hero h1 {
+.masthead {
+  padding: 0.5rem 0 0.25rem;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 0.35rem;
+  max-width: 36rem;
+}
+.masthead__eyebrow {
   margin: 0;
-  font-size: 1.6rem;
-  color: var(--ink);
+  font-size: 0.72rem;
+  letter-spacing: 0.28em;
+  color: var(--cinnabar);
+  font-weight: 600;
 }
-.home__hero p {
-  margin: 0.35rem 0 0.25rem;
+.masthead h1 {
+  margin: 0.35rem 0 0;
+  font-size: clamp(2rem, 4vw, 2.65rem);
+  font-weight: 700;
+  letter-spacing: 0.18em;
+}
+.masthead__lede {
+  margin: 0.65rem 0 1rem;
   color: var(--muted);
+  font-size: 0.92rem;
+  max-width: 32rem;
 }
 .home__grid {
   display: grid;
-  grid-template-columns: 1.4fr 1fr;
-  gap: 1rem;
+  grid-template-columns: 1.45fr 0.9fr;
+  gap: 1.25rem;
   align-items: start;
 }
 .home__col {
   display: grid;
-  gap: 1rem;
+  gap: 1.25rem;
 }
 .state {
   color: var(--muted);
+  font-family: var(--font-display);
 }
 .state--err {
-  color: #b91c1c;
+  color: var(--cinnabar);
 }
 @media (max-width: 800px) {
   .home__grid {

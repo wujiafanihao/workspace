@@ -1,33 +1,35 @@
 <script setup lang="ts">
-/** 搜索空态 */
 defineProps<{ word: string }>()
 </script>
 
 <template>
-  <div class="empty card" role="status">
-    <h2>未找到相关词条</h2>
-    <p v-if="word">没有与「{{ word }}」匹配的结果，换个关键词试试。</p>
-    <p v-else>请输入关键词后搜索。</p>
-    <p class="hint">可试：苹果、量子、长征</p>
+  <div class="empty card card--ruled" role="status">
+    <h2>馆藏未收录</h2>
+    <p v-if="word">没有与「{{ word }}」匹配的词条，换个写法再试。</p>
+    <p v-else>请在顶栏输入关键词后检索。</p>
+    <p class="hint">可试：苹果 · 量子 · 长征</p>
   </div>
 </template>
 
 <style scoped>
 .empty {
-  padding: 2.5rem 1.5rem;
-  text-align: center;
+  padding: 2.75rem 1.5rem;
+  text-align: left;
 }
 .empty h2 {
   margin: 0;
-  color: var(--ink);
-  font-size: 1.15rem;
+  font-size: 1.25rem;
+  letter-spacing: 0.16em;
 }
 .empty p {
-  margin: 0.6rem 0 0;
+  margin: 0.7rem 0 0;
   color: var(--muted);
+  max-width: 28rem;
 }
 .hint {
-  color: var(--brand) !important;
-  font-weight: 600;
+  color: var(--cinnabar) !important;
+  font-family: var(--font-display);
+  letter-spacing: 0.08em;
+  margin-top: 1.1rem !important;
 }
 </style>

@@ -1,19 +1,8 @@
-/* 百科风：干净可读、中文友好 */
-:root {
-  --bg: #f6f7f9;
-  --surface: #ffffff;
-  --ink: #1a1a1a;
-  --body: #333;
-  --muted: #6b7280;
-  --border: #e5e7eb;
-  --brand: #2932e1;
-  --brand-soft: #eef0ff;
-  --radius: 10px;
-  --shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
-  --max: 1080px;
-  --font: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
-    "Noto Sans SC", system-ui, sans-serif;
-}
+/**
+ * 全局基础样式（纸墨编辑风）
+ * 只消费 tokens.css 的 var；不在此写死主题色。
+ */
+@import './tokens.css';
 
 *,
 *::before,
@@ -25,20 +14,37 @@ html,
 body {
   margin: 0;
   padding: 0;
-  background: var(--bg);
-  color: var(--body);
-  font-family: var(--font);
+  min-height: 100%;
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(var(--noise) 0.6px, transparent 0.7px),
+    linear-gradient(
+      180deg,
+      var(--bg-glow-top) 0%,
+      var(--bg) 48%,
+      var(--bg-glow-bottom) 100%
+    );
+  background-size: 3px 3px, auto;
+  color: var(--fg-body);
+  font-family: var(--font-body);
   font-size: 15px;
-  line-height: 1.65;
+  line-height: 1.7;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+#app {
+  min-height: 100vh;
 }
 
 a {
-  color: var(--brand);
-  text-decoration: none;
+  color: var(--link);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.18em;
 }
 a:hover {
-  text-decoration: underline;
+  color: var(--link-hover);
 }
 
 img {
@@ -49,14 +55,22 @@ img {
 button,
 input {
   font: inherit;
+  color: inherit;
 }
 
-#app {
-  min-height: 100vh;
+h1,
+h2,
+h3,
+.display {
+  font-family: var(--font-display);
+  font-weight: 600;
+  color: var(--fg);
+  letter-spacing: 0.04em;
+  line-height: 1.35;
 }
 
 .container {
-  width: min(100% - 2rem, var(--max));
+  width: min(100% - 2.5rem, var(--max));
   margin-inline: auto;
 }
 
@@ -64,7 +78,24 @@ input {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  box-shadow: var(--shadow);
+  box-shadow: inset 0 1px 0 var(--inset-shine);
+  position: relative;
+  color: var(--fg-body);
+}
+
+.card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--accent);
+  opacity: 0;
+}
+
+.card--ruled::before {
+  opacity: 1;
 }
 
 .sr-only {

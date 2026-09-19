@@ -1,13 +1,11 @@
 <script setup lang="ts">
-/** 动态信息流 */
 import type { DynamicItem } from '../../api/home'
-
 defineProps<{ list: DynamicItem[] }>()
 </script>
 
 <template>
-  <section class="feed card" aria-label="最近动态">
-    <h2 class="feed__title">最近动态</h2>
+  <section class="feed card card--ruled" aria-label="最近动态">
+    <h2 class="feed__title">馆内动态</h2>
     <ul class="feed__list">
       <li v-for="item in list" :key="item.id" class="feed__item">
         <div class="feed__meta">
@@ -23,12 +21,14 @@ defineProps<{ list: DynamicItem[] }>()
 
 <style scoped>
 .feed {
-  padding: 1rem 1.25rem 0.5rem;
+  padding: 1.05rem 1.2rem 0.65rem;
 }
 .feed__title {
-  margin: 0 0 0.75rem;
+  margin: 0 0 0.85rem;
   font-size: 1.05rem;
-  color: var(--ink);
+  letter-spacing: 0.14em;
+  padding-bottom: 0.55rem;
+  border-bottom: 1px dashed var(--line);
 }
 .feed__list {
   list-style: none;
@@ -36,35 +36,34 @@ defineProps<{ list: DynamicItem[] }>()
   padding: 0;
 }
 .feed__item {
-  padding: 0.85rem 0;
-  border-top: 1px solid var(--border);
+  padding: 0.9rem 0;
+  border-top: 1px solid var(--line);
 }
 .feed__item:first-of-type {
   border-top: none;
-  padding-top: 0.25rem;
+  padding-top: 0.15rem;
 }
 .feed__meta {
   display: flex;
-  gap: 0.6rem;
+  gap: 0.65rem;
   align-items: center;
   color: var(--muted);
-  font-size: 0.8rem;
-  margin-bottom: 0.25rem;
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  margin-bottom: 0.3rem;
 }
 .feed__type {
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 0.05rem 0.4rem;
+  color: var(--cinnabar);
+  font-weight: 600;
 }
 .feed__heading {
   margin: 0;
   font-size: 0.98rem;
-  color: var(--ink);
+  letter-spacing: 0.06em;
 }
 .feed__summary {
   margin: 0.3rem 0 0;
   color: var(--muted);
-  font-size: 0.9rem;
+  font-size: 0.88rem;
 }
 </style>

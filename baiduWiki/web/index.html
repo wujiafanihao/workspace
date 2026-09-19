@@ -1,11 +1,28 @@
 <!doctype html>
 <html lang="zh-CN">
   <head>
+  <script>
+    (function () {
+      try {
+        var k = 'baiduwiki-theme';
+        var m = localStorage.getItem(k);
+        if (m !== 'light' && m !== 'dark') {
+          m = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
+        document.documentElement.setAttribute('data-theme', m);
+        document.documentElement.style.colorScheme = m;
+      } catch (e) {}
+    })();
+  </script>
+
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>百科Wiki</title>
-  </head>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&family=Noto+Serif+SC:wght@500;600;700&display=swap" rel="stylesheet" />
+</head>
   <body>
     <div id="app"></div>
     <script type="module" src="/src/main.ts"></script>

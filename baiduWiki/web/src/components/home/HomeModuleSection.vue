@@ -1,5 +1,4 @@
 <script setup lang="ts">
-/** 通用首页模块区块（标题 + 词条卡片） */
 import { useRouter } from 'vue-router'
 import type { ModuleBlock } from '../../api/home'
 
@@ -12,7 +11,7 @@ function goSearch(title: string) {
 </script>
 
 <template>
-  <section class="mod card" :aria-label="block.title">
+  <section class="mod card card--ruled" :aria-label="block.title">
     <h2 class="mod__title">{{ block.title }}</h2>
     <div class="mod__grid">
       <button
@@ -31,38 +30,44 @@ function goSearch(title: string) {
 
 <style scoped>
 .mod {
-  padding: 1rem 1.25rem 1.15rem;
+  padding: 1.05rem 1.25rem 1.2rem;
 }
 .mod__title {
-  margin: 0 0 0.85rem;
+  margin: 0 0 0.95rem;
   font-size: 1.05rem;
-  color: var(--ink);
+  letter-spacing: 0.14em;
+  padding-bottom: 0.55rem;
+  border-bottom: 1px dashed var(--line);
 }
 .mod__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 0.85rem;
 }
 .mod__card {
   text-align: left;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--bg);
-  padding: 0.85rem;
+  border: none;
+  border-top: 2px solid var(--ink);
+  background: transparent;
+  padding: 0.75rem 0.15rem 0.35rem;
   cursor: pointer;
+  transition: border-color 0.15s ease;
 }
 .mod__card:hover {
-  border-color: var(--brand);
-  background: var(--brand-soft);
+  border-top-color: var(--cinnabar);
 }
 .mod__card h3 {
   margin: 0;
-  font-size: 0.98rem;
-  color: var(--ink);
+  font-size: 1rem;
+  letter-spacing: 0.08em;
+}
+.mod__card:hover h3 {
+  color: var(--cinnabar);
 }
 .mod__card p {
-  margin: 0.35rem 0 0;
+  margin: 0.4rem 0 0;
   color: var(--muted);
-  font-size: 0.88rem;
+  font-size: 0.86rem;
+  line-height: 1.55;
 }
 </style>

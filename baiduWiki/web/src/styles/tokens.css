@@ -1,0 +1,121 @@
+/**
+ * 全局设计 token（亮/暗）
+ * 规则：
+ * 1. 业务组件禁止写死色值，只使用 var(--*)
+ * 2. 亮/暗两套都保证「字色 vs 背景」可读（目标约 WCAG AA）
+ * 3. 改主题只动本文件 → 一处修改、处处生效
+ *
+ * 语义：
+ * --bg / --surface / --bg-elevated：背景层
+ * --fg / --fg-muted / --fg-faint：前景字色（相对背景对比足够）
+ * --accent / --accent-fg：强调色及其上的字色
+ * --link / --link-hover：链接
+ * --border / --border-strong：分割线
+ * --header-bg：顶栏半透明底
+ * --control-bg / --control-fg：实心按钮
+ * --focus-ring：焦点环
+ */
+
+:root,
+[data-theme='light'] {
+  color-scheme: light;
+
+  --bg: #f3efe6;
+  --bg-deep: #e8e1d4;
+  --bg-glow-top: #f6f2ea;
+  --bg-glow-bottom: #efe9de;
+  --surface: #faf7f1;
+  --bg-elevated: #fffdf8;
+
+  --fg: #1a1612;
+  --fg-body: #2f2a24;
+  --fg-muted: #5c564e;
+  --fg-faint: #7a7268;
+
+  --accent: #b33a2b;
+  --accent-soft: rgba(179, 58, 43, 0.12);
+  --accent-fg: #ffffff;
+
+  --link: #1a4f4c;
+  --link-hover: #b33a2b;
+
+  --border: #cfc4b4;
+  --border-strong: #a89886;
+
+  --header-bg: rgba(250, 247, 241, 0.92);
+  --control-bg: #1a1612;
+  --control-fg: #f3efe6;
+  --control-hover-bg: #b33a2b;
+  --control-hover-fg: #ffffff;
+
+  --focus-ring: rgba(179, 58, 43, 0.35);
+  --noise: rgba(26, 22, 18, 0.04);
+  --inset-shine: rgba(255, 255, 255, 0.55);
+
+  --cover-bg: var(--bg-deep);
+  --cover-filter: grayscale(0.2) contrast(1.05);
+
+  --radius: 2px;
+  --max: 1040px;
+  --font-display: 'Noto Serif SC', 'Songti SC', 'STSong', serif;
+  --font-body: 'Noto Sans SC', 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei', sans-serif;
+}
+
+[data-theme='dark'] {
+  color-scheme: dark;
+
+  /* 深墨底：字色用浅纸色，避免「深字深底」看不见 */
+  --bg: #161310;
+  --bg-deep: #0f0d0b;
+  --bg-glow-top: #1c1814;
+  --bg-glow-bottom: #12100e;
+  --surface: #221e19;
+  --bg-elevated: #2a241e;
+
+  --fg: #f5f0e6;
+  --fg-body: #e6dfd3;
+  --fg-muted: #b7aea0;
+  --fg-faint: #8f8678;
+
+  /* 暗底上朱砂略提亮，保证强调仍醒目 */
+  --accent: #e56a58;
+  --accent-soft: rgba(229, 106, 88, 0.18);
+  --accent-fg: #1a1210;
+
+  --link: #8fd0c9;
+  --link-hover: #f0a090;
+
+  --border: #3f3830;
+  --border-strong: #5a5146;
+
+  --header-bg: rgba(34, 30, 25, 0.92);
+  --control-bg: #f5f0e6;
+  --control-fg: #161310;
+  --control-hover-bg: #e56a58;
+  --control-hover-fg: #1a1210;
+
+  --focus-ring: rgba(229, 106, 88, 0.45);
+  --noise: rgba(245, 240, 230, 0.035);
+  --inset-shine: rgba(255, 255, 255, 0.04);
+
+  --cover-bg: #2a241e;
+  --cover-filter: grayscale(0.35) contrast(1.08) brightness(0.92);
+}
+
+/* 兼容旧变量名 → 映射到语义 token，避免散落组件漏改 */
+:root,
+[data-theme='light'],
+[data-theme='dark'] {
+  --paper: var(--bg);
+  --paper-deep: var(--bg-deep);
+  --ink: var(--fg);
+  --body: var(--fg-body);
+  --muted: var(--fg-muted);
+  --line: var(--border);
+  --line-strong: var(--border-strong);
+  --cinnabar: var(--accent);
+  --cinnabar-soft: var(--accent-soft);
+  --ink-link: var(--link);
+  --ink-link-hover: var(--link-hover);
+}

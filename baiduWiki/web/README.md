@@ -43,3 +43,9 @@ npm run build
 
 参见 `.env.example`（`VITE_DATA_MODE=mock`）。真实 `.env.*` 已被工作空间 gitignore。
 
+## 主题（亮 / 暗）
+
+- Token 唯一来源：`src/styles/tokens.css`（`data-theme=light|dark`）
+- 逻辑：`src/theme/`（`useTheme` / `bootstrapTheme`）
+- 顶栏「日/月」切换；选择写入 `localStorage`（`baiduwiki-theme`）
+- 组件禁止硬编码色值，只使用 `var(--*)`，保证亮暗都能看清字色

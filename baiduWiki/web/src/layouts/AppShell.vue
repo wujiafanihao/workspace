@@ -1,7 +1,4 @@
 <script setup lang="ts">
-/**
- * 顶栏 + 主内容 + 页脚
- */
 import AppHeader from '../components/AppHeader.vue'
 import AppFooter from '../components/AppFooter.vue'
 </script>
@@ -24,6 +21,6 @@ import AppFooter from '../components/AppFooter.vue'
 }
 .shell__main {
   flex: 1;
-  padding: 1.25rem 0 2.5rem;
+  padding: 1.75rem 0 1rem;
 }
 </style>

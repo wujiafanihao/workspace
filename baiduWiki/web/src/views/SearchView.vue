@@ -1,8 +1,4 @@
 <script setup lang="ts">
-/**
- * 搜索页：读 route.query.word，调用 search()，展示 total / 空态
- * Header 通过 watch query 自动回填
- */
 import { ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { search, type SearchLemma } from '../api/search'
@@ -46,12 +42,13 @@ watch(
 <template>
   <div class="container search-page">
     <header class="search-page__head">
-      <h1 v-if="word">以下结果关于：{{ word }}</h1>
-      <h1 v-else>搜索词条</h1>
-      <p v-if="!loading && !error">共 {{ total }} 条</p>
+      <p class="eyebrow">SEARCH</p>
+      <h1 v-if="word">「{{ word }}」</h1>
+      <h1 v-else>检索</h1>
+      <p v-if="!loading && !error" class="meta">共 {{ total }} 条相关词条</p>
     </header>
 
-    <p v-if="loading" class="state">正在搜索…</p>
+    <p v-if="loading" class="state">正在检索…</p>
     <p v-else-if="error" class="state state--err">{{ error }}</p>
     <SearchEmpty v-else-if="total === 0" :word="word" />
     <SearchResultList v-else :list="list" />
@@ -61,21 +58,35 @@ watch(
 <style scoped>
 .search-page {
   display: grid;
-  gap: 1rem;
+  gap: 1.25rem;
+}
+.search-page__head {
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 0.85rem;
+  max-width: 40rem;
+}
+.eyebrow {
+  margin: 0;
+  font-size: 0.72rem;
+  letter-spacing: 0.28em;
+  color: var(--cinnabar);
+  font-weight: 600;
 }
 .search-page__head h1 {
-  margin: 0;
-  font-size: 1.35rem;
-  color: var(--ink);
+  margin: 0.3rem 0 0;
+  font-size: clamp(1.6rem, 3vw, 2.1rem);
+  letter-spacing: 0.12em;
 }
-.search-page__head p {
-  margin: 0.35rem 0 0;
+.meta {
+  margin: 0.45rem 0 0;
   color: var(--muted);
+  font-size: 0.88rem;
 }
 .state {
   color: var(--muted);
+  font-family: var(--font-display);
 }
 .state--err {
-  color: #b91c1c;
+  color: var(--cinnabar);
 }
 </style>

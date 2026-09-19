@@ -1,18 +1,12 @@
 <script setup lang="ts">
-/** 单条搜索结果：title / summary / cover */
 import type { SearchLemma } from '../../api/search'
-
 defineProps<{ item: SearchLemma }>()
 </script>
 
 <template>
   <article class="item">
     <div class="item__cover" aria-hidden="true">
-      <img
-        v-if="item.cover"
-        :src="item.cover"
-        :alt="item.title"
-      />
+      <img v-if="item.cover" :src="item.cover" :alt="item.title" />
       <span v-else class="item__placeholder">词</span>
     </div>
     <div class="item__body">
@@ -26,43 +20,50 @@ defineProps<{ item: SearchLemma }>()
 <style scoped>
 .item {
   display: grid;
-  grid-template-columns: 72px 1fr;
-  gap: 1rem;
-  padding: 1rem 0;
-  border-bottom: 1px solid var(--border);
+  grid-template-columns: 64px 1fr;
+  gap: 1.1rem;
+  padding: 1.15rem 0;
+  border-bottom: 1px solid var(--line);
+}
+.item:last-child {
+  border-bottom: none;
 }
 .item__cover {
-  width: 72px;
-  height: 72px;
-  border-radius: 8px;
+  width: 64px;
+  height: 64px;
   overflow: hidden;
-  background: var(--brand-soft);
+  background: var(--cover-bg);
   display: grid;
   place-items: center;
-  border: 1px solid var(--border);
+  border: 1px solid var(--line);
 }
 .item__cover img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  filter: var(--cover-filter);
 }
 .item__placeholder {
-  color: var(--brand);
+  color: var(--cinnabar);
+  font-family: var(--font-display);
   font-weight: 700;
-  font-size: 1.25rem;
+  font-size: 1.15rem;
 }
 .item__title {
   margin: 0;
-  font-size: 1.1rem;
-  color: var(--ink);
+  font-size: 1.15rem;
+  letter-spacing: 0.08em;
 }
 .item__summary {
-  margin: 0.35rem 0 0;
+  margin: 0.4rem 0 0;
   color: var(--body);
+  font-size: 0.92rem;
 }
 .item__path {
-  margin: 0.35rem 0 0;
+  margin: 0.4rem 0 0;
   color: var(--muted);
-  font-size: 0.8rem;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 </style>
