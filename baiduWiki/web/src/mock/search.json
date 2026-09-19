@@ -1,0 +1,66 @@
+{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "word": "",
+    "total": 8,
+    "list": [
+      {
+        "lemma_id": "lemma-apple-fruit",
+        "title": "苹果",
+        "summary": "蔷薇科苹果属植物的果实，也是常见水果；亦可指代苹果公司等义项。",
+        "cover": "",
+        "url_path": "/lemma/apple-fruit"
+      },
+      {
+        "lemma_id": "lemma-apple-inc",
+        "title": "苹果公司",
+        "summary": "美国跨国科技企业，以消费电子、软件与在线服务著称。",
+        "cover": "",
+        "url_path": "/lemma/apple-inc"
+      },
+      {
+        "lemma_id": "lemma-quantum",
+        "title": "量子计算",
+        "summary": "基于量子力学原理的计算模型，可在特定问题上提供指数级加速潜力。",
+        "cover": "",
+        "url_path": "/lemma/quantum-computing"
+      },
+      {
+        "lemma_id": "lemma-quantum-ent",
+        "title": "量子纠缠",
+        "summary": "多粒子系统中非局域关联的量子现象，是量子信息科学的基础资源。",
+        "cover": "",
+        "url_path": "/lemma/quantum-entanglement"
+      },
+      {
+        "lemma_id": "lemma-longmarch",
+        "title": "长征",
+        "summary": "1934–1936 年中国工农红军主力撤离苏区、实行战略转移的历史进程。",
+        "cover": "",
+        "url_path": "/lemma/long-march"
+      },
+      {
+        "lemma_id": "lemma-longmarch5",
+        "title": "长征五号",
+        "summary": "中国新一代大型运载火箭，用于发射大型航天器与空间站舱段。",
+        "cover": "",
+        "url_path": "/lemma/long-march-5"
+      },
+      {
+        "lemma_id": "lemma-ai",
+        "title": "人工智能",
+        "summary": "研究、开发用于模拟与扩展人类智能的理论、方法、技术及应用系统。",
+        "cover": "",
+        "url_path": "/lemma/artificial-intelligence"
+      },
+      {
+        "lemma_id": "lemma-silk",
+        "title": "丝绸之路",
+        "summary": "古代横贯欧亚的商路网络，促进了商品、技术与文化交流。",
+        "cover": "",
+        "url_path": "/lemma/silk-road"
+      }
+    ]
+  }
+}

@@ -1,0 +1,122 @@
+{
+  "version": 1,
+  "updated_at": "2026-09-19T17:00:00+08:00",
+  "modules": {
+    "statistic": {
+      "items": [
+        { "label": "词条总数", "value": "28,436,512", "unit": "条" },
+        { "label": "今日新增", "value": "1,286", "unit": "条" },
+        { "label": "编辑次数", "value": "94,201", "unit": "次" },
+        { "label": "在线读者", "value": "52,118", "unit": "人" }
+      ]
+    },
+    "hot_lemmas": {
+      "list": [
+        { "lemma_id": "hot-1", "title": "量子计算", "heat": 9821 },
+        { "lemma_id": "hot-2", "title": "苹果", "heat": 8754 },
+        { "lemma_id": "hot-3", "title": "长征", "heat": 7632 },
+        { "lemma_id": "hot-4", "title": "人工智能", "heat": 7011 }
+      ]
+    },
+    "dynamic": {
+      "list": [
+        {
+          "id": "dyn-1",
+          "title": "「量子纠缠」词条完成权威审校",
+          "summary": "补充了近年来实验验证与应用场景说明。",
+          "time": "2026-09-19 14:20",
+          "type": "审校"
+        },
+        {
+          "id": "dyn-2",
+          "title": "新词条：长征五号乙运载火箭",
+          "summary": "收录发射任务年表与主要技术指标。",
+          "time": "2026-09-19 11:05",
+          "type": "新建"
+        },
+        {
+          "id": "dyn-3",
+          "title": "「苹果公司」产品线时间线更新",
+          "summary": "同步最新硬件发布节点与命名沿革。",
+          "time": "2026-09-18 19:40",
+          "type": "更新"
+        },
+        {
+          "id": "dyn-4",
+          "title": "历史上的今天专题：九月特辑上线",
+          "summary": "精选科学发现与文化事件条目。",
+          "time": "2026-09-18 09:15",
+          "type": "专题"
+        }
+      ]
+    },
+    "events_on_history": {
+      "list": [
+        {
+          "id": "eoh-1",
+          "year": 1987,
+          "title": "首个中文维基类百科设想提出",
+          "summary": "民间技术社区开始讨论中文开放百科的可行性。"
+        },
+        {
+          "id": "eoh-2",
+          "year": 2005,
+          "title": "中文网络百科进入规模化建设期",
+          "summary": "词条数量与编辑社区快速增长，知识结构化探索加速。"
+        },
+        {
+          "id": "eoh-3",
+          "year": 2015,
+          "title": "移动端百科阅读成为主流入口",
+          "summary": "触屏阅读与卡片化摘要改变了词条消费习惯。"
+        }
+      ]
+    },
+    "module": {
+      "blocks": [
+        {
+          "id": "blk-science",
+          "title": "科学前沿",
+          "items": [
+            {
+              "lemma_id": "blk-s1",
+              "title": "量子计算",
+              "summary": "利用量子态叠加与纠缠进行信息处理的计算范式。"
+            },
+            {
+              "lemma_id": "blk-s2",
+              "title": "超导",
+              "summary": "某些材料在低温下电阻消失的物理现象。"
+            },
+            {
+              "lemma_id": "blk-s3",
+              "title": "基因编辑",
+              "summary": "对生物体基因组进行定向修饰的技术总称。"
+            }
+          ]
+        },
+        {
+          "id": "blk-history",
+          "title": "人文历史",
+          "items": [
+            {
+              "lemma_id": "blk-h1",
+              "title": "长征",
+              "summary": "中国工农红军战略转移的重大历史事件。"
+            },
+            {
+              "lemma_id": "blk-h2",
+              "title": "丝绸之路",
+              "summary": "连接东西方的古代商贸与文化交流通道。"
+            },
+            {
+              "lemma_id": "blk-h3",
+              "title": "甲骨文",
+              "summary": "中国已知最早的系统文字之一，见于殷商卜辞。"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
