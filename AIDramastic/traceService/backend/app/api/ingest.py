@@ -20,7 +20,46 @@ log = get_logger(__name__)
 router = APIRouter(prefix="/api/v1/logs", tags=["ingest"])
 
 
-@router.post("/ingest", response_model=Envelope)
+@router.post(
+    "/ingest",
+    response_model=Envelope,
+    summary="批量日志入队",
+    description=(
+        "接收一批结构化日志，做轻量校验后写入 Redis 队列 `trace:ingest`，立即返回。"
+        "\n\n"
+        "**不会**写入 SQLite；落库由 Python Worker 规范化后再经 Go Worker 完成。"
+        "\n\n"
+        "- `logs` 至少 1 条；超过配置 `ingest.max_batch` 返回业务错误。\n"
+        "- 单条必填：`trace_id` / `service` / `level` / `message|msg` / `timestamp`。\n"
+        "- 成功：`data.accepted` 为实际入队条数。"
+    ),
+    responses={
+        200: {
+            "description": "入队成功",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "code": 0,
+                        "message": "ok",
+                        "data": {"accepted": 1},
+                    }
+                }
+            },
+        },
+        400: {
+            "description": "参数校验失败或批次超限",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "code": 40001,
+                        "message": "validation failed",
+                        "data": {"errors": []},
+                    }
+                }
+            },
+        },
+    },
+)
 async def ingest_logs(body: IngestBody, request: Request) -> Envelope:
     """批量 ingest：校验后仅入 Redis，绝不写 SQLite。
 

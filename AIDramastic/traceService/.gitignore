@@ -1,5 +1,6 @@
 # data & logs
-data/
+data/*
+!data/openapi.json
 *.db
 *.db-*
 log/*.log

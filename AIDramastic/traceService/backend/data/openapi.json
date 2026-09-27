@@ -1,0 +1,417 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "traceService 链路日志服务",
+    "description": "## 简介\n\ntraceService FastAPI：跨服务链路日志的 **采集入队** 与 **按 trace_id 查询**。\n\n## 架构要点\n\n- **ingest**：轻量校验 → Redis `trace:ingest` → 立即返回（SQLite 由 Go Worker 写入）\n- **query**：Redis 缓存 → SQLite `ORDER BY timestamp ASC`\n- **healthz**：存活探针\n\n## 统一响应\n\n业务接口成功/失败均为 `{ \"code\", \"message\", \"data\" }` 包络（healthz 除外）。\n\n## 文档入口\n\n- Swagger UI：`/docs`\n- ReDoc：`/redoc`\n- OpenAPI JSON：`/openapi.json`（亦导出至 `data/openapi.json` 供 Apifox 导入）",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/healthz": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "健康检查",
+        "description": "进程存活探针。返回 `{status: ok}`。不探测 Redis / SQLite 是否可用；用于负载均衡或本地冒烟。",
+        "operationId": "healthz_healthz_get",
+        "responses": {
+          "200": {
+            "description": "服务进程正常",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object",
+                  "title": "Response Healthz Healthz Get"
+                },
+                "example": {
+                  "status": "ok"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/logs/ingest": {
+      "post": {
+        "tags": [
+          "ingest"
+        ],
+        "summary": "批量日志入队",
+        "description": "接收一批结构化日志，做轻量校验后写入 Redis 队列 `trace:ingest`，立即返回。\n\n**不会**写入 SQLite；落库由 Python Worker 规范化后再经 Go Worker 完成。\n\n- `logs` 至少 1 条；超过配置 `ingest.max_batch` 返回业务错误。\n- 单条必填：`trace_id` / `service` / `level` / `message|msg` / `timestamp`。\n- 成功：`data.accepted` 为实际入队条数。",
+        "operationId": "ingest_logs_api_v1_logs_ingest_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IngestBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "入队成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                },
+                "example": {
+                  "code": 0,
+                  "message": "ok",
+                  "data": {
+                    "accepted": 1
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参数校验失败或批次超限",
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": 40001,
+                  "message": "validation failed",
+                  "data": {
+                    "errors": []
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/logs": {
+      "get": {
+        "tags": [
+          "query"
+        ],
+        "summary": "按 trace_id 查询日志时间线",
+        "description": "根据 `trace_id` 返回跨服务日志时间线（按 `timestamp` 升序）。\n\n查询顺序：Redis 缓存 → miss 时只读 SQLite 并回填缓存。\n\n- `trace_id` 必填；缺参或空白 → 业务码 40001。\n- 无数据时 `data.logs` 为空数组（仍返回成功码 0）。",
+        "operationId": "query_logs_api_v1_logs_get",
+        "parameters": [
+          {
+            "name": "trace_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "必填。全链路追踪 ID；用于拉取该链路下全部日志。",
+              "examples": [
+                "11111111-1111-1111-1111-111111111111"
+              ],
+              "title": "Trace Id"
+            },
+            "description": "必填。全链路追踪 ID；用于拉取该链路下全部日志。"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "查询成功（可能 logs 为空）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                },
+                "example": {
+                  "code": 0,
+                  "message": "ok",
+                  "data": {
+                    "trace_id": "11111111-1111-1111-1111-111111111111",
+                    "logs": [
+                      {
+                        "id": 1,
+                        "trace_id": "11111111-1111-1111-1111-111111111111",
+                        "span_id": "span-0",
+                        "service": "gateway",
+                        "level": "INFO",
+                        "message": "request start",
+                        "timestamp": "2026-09-27T22:00:00+08:00",
+                        "fields": {}
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "缺少 trace_id",
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": 40001,
+                  "message": "trace_id is required"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Envelope": {
+        "properties": {
+          "code": {
+            "type": "integer",
+            "title": "Code",
+            "description": "业务码；0 表示成功，非 0 为错误（如 40001）。"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "description": "人类可读说明。"
+          },
+          "data": {
+            "title": "Data",
+            "description": "业务数据；失败时可为错误细节或 null。"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "Envelope",
+        "description": "统一响应包络 {code,message,data}。",
+        "examples": [
+          {
+            "code": 0,
+            "data": {
+              "accepted": 1
+            },
+            "message": "ok"
+          }
+        ]
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "IngestBody": {
+        "properties": {
+          "logs": {
+            "items": {
+              "$ref": "#/components/schemas/LogIn"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Logs",
+            "description": "待入队日志列表；至少 1 条，上限见配置 ingest.max_batch。"
+          }
+        },
+        "type": "object",
+        "required": [
+          "logs"
+        ],
+        "title": "IngestBody",
+        "description": "批量 ingest 请求体。",
+        "examples": [
+          {
+            "logs": [
+              {
+                "level": "INFO",
+                "message": "request start",
+                "service": "gateway",
+                "timestamp": "2026-09-27T22:00:00+08:00",
+                "trace_id": "11111111-1111-1111-1111-111111111111"
+              }
+            ]
+          }
+        ]
+      },
+      "LogIn": {
+        "properties": {
+          "trace_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Trace Id",
+            "description": "全链路追踪 ID（UUID 字符串）；跨服务日志关联主键。"
+          },
+          "span_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Span Id",
+            "description": "可选跨度 ID；同一 trace 内区分调用段。"
+          },
+          "service": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Service",
+            "description": "服务名，如 gateway / user-svc / ai-svc / trace-api。"
+          },
+          "level": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Level",
+            "description": "日志级别：DEBUG / INFO / WARN / ERROR 等。"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message",
+            "description": "日志正文；与 msg 二选一，优先 message。"
+          },
+          "msg": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Msg",
+            "description": "日志正文别名（兼容旧字段）；与 message 二选一。"
+          },
+          "timestamp": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Timestamp",
+            "description": "事件时间，推荐 ISO8601 带时区，如 2026-09-27T22:00:00+08:00。"
+          },
+          "fields": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fields",
+            "description": "可选扩展字段对象（JSON object）；禁止放入密钥明文。"
+          }
+        },
+        "type": "object",
+        "required": [
+          "trace_id",
+          "service",
+          "level",
+          "timestamp"
+        ],
+        "title": "LogIn",
+        "description": "单条 ingest 入参。\n\n必填：trace_id / service / level / message|msg / timestamp。\nmessage 与 msg 互为别名；优先 message。",
+        "examples": [
+          {
+            "fields": {
+              "method": "GET",
+              "path": "/api/v1/health"
+            },
+            "level": "INFO",
+            "message": "request start",
+            "service": "gateway",
+            "span_id": "span-0",
+            "timestamp": "2026-09-27T22:00:00+08:00",
+            "trace_id": "11111111-1111-1111-1111-111111111111"
+          }
+        ]
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "health",
+      "description": "健康检查：进程存活探针，不探测 Redis/SQLite 深度依赖。"
+    },
+    {
+      "name": "ingest",
+      "description": "日志采集：批量校验后仅写入 Redis 队列 `trace:ingest`，不写 SQLite。"
+    },
+    {
+      "name": "query",
+      "description": "日志查询：按 `trace_id` 查时间线，优先 Redis 缓存，未命中再读 SQLite。"
+    }
+  ]
+}
