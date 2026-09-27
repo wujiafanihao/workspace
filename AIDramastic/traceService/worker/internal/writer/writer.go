@@ -19,30 +19,33 @@ import (
 
 // LogRow 待写入行。
 type LogRow struct {
-	TraceID   string
-	SpanID    string
-	Service   string
-	Level     string
-	Message   string
-	Timestamp string
-	Fields    map[string]any
+	TraceID    string
+	SpanID     string
+	Service    string
+	Level      string
+	Message    string
+	Timestamp  string
+	Fields     map[string]any
+	RedisMsgID string // stream message id；list 模式为空
 }
 
 const ddl = `
 PRAGMA journal_mode=WAL;
 CREATE TABLE IF NOT EXISTS logs (
-  id           INTEGER PRIMARY KEY AUTOINCREMENT,
-  trace_id     TEXT    NOT NULL,
-  span_id      TEXT,
-  service      TEXT    NOT NULL,
-  level        TEXT    NOT NULL,
-  message      TEXT    NOT NULL,
-  timestamp    TEXT    NOT NULL,
-  fields_json  TEXT,
-  created_at   TEXT    NOT NULL DEFAULT (datetime('now'))
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  trace_id      TEXT    NOT NULL,
+  span_id       TEXT,
+  service       TEXT    NOT NULL,
+  level         TEXT    NOT NULL,
+  message       TEXT    NOT NULL,
+  timestamp     TEXT    NOT NULL,
+  fields_json   TEXT,
+  redis_msg_id  TEXT,
+  created_at    TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_logs_trace_id ON logs(trace_id);
 CREATE INDEX IF NOT EXISTS idx_logs_trace_ts ON logs(trace_id, timestamp);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_logs_redis_msg_id ON logs(redis_msg_id);
 `
 
 // Writer SQLite 批量写者。
@@ -62,11 +65,25 @@ func Open(cfg config.SqliteConfig) (*Writer, error) {
 		return nil, fmt.Errorf("open sqlite: %w", err)
 	}
 	db.SetMaxOpenConns(1)
-	if _, err := db.Exec(ddl); err != nil {
+	if err := ensureSchema(db); err != nil {
 		_ = db.Close()
-		return nil, fmt.Errorf("ddl: %w", err)
+		return nil, err
 	}
 	return &Writer{db: db, cfg: cfg}, nil
+}
+
+// ensureSchema 建表并迁移补列。
+func ensureSchema(db *sql.DB) error {
+	if _, err := db.Exec(ddl); err != nil {
+		return fmt.Errorf("ddl: %w", err)
+	}
+	// 旧库缺列时 ADD COLUMN；已存在则忽略错误。
+	_, _ = db.Exec(`ALTER TABLE logs ADD COLUMN redis_msg_id TEXT`)
+	// 完整 UNIQUE（非 partial）以便 ON CONFLICT(redis_msg_id)；SQLite UNIQUE 允许多个 NULL（list 模式）。
+	if _, err := db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_logs_redis_msg_id ON logs(redis_msg_id)`); err != nil {
+		return fmt.Errorf("migrate index: %w", err)
+	}
+	return nil
 }
 
 // Close 关闭 DB。
@@ -77,20 +94,21 @@ func (w *Writer) Close() error {
 	return w.db.Close()
 }
 
-// BuildInsertSQL 返回批量 INSERT 语句与参数（纯函数，便于单测）。
-// n 为行数；每行 7 个占位符。
+// BuildInsertSQL 返回批量 INSERT 语句（纯函数，便于单测）。
+// n 为行数；每行 8 个占位符；ON CONFLICT(redis_msg_id) DO NOTHING 保证 stream 幂等。
 func BuildInsertSQL(n int) (string, error) {
 	if n <= 0 {
 		return "", fmt.Errorf("n must be > 0")
 	}
 	var b strings.Builder
-	b.WriteString("INSERT INTO logs (trace_id, span_id, service, level, message, timestamp, fields_json) VALUES ")
+	b.WriteString("INSERT INTO logs (trace_id, span_id, service, level, message, timestamp, fields_json, redis_msg_id) VALUES ")
 	for i := 0; i < n; i++ {
 		if i > 0 {
 			b.WriteByte(',')
 		}
-		b.WriteString("(?,?,?,?,?,?,?)")
+		b.WriteString("(?,?,?,?,?,?,?,?)")
 	}
+	b.WriteString(" ON CONFLICT(redis_msg_id) DO NOTHING")
 	return b.String(), nil
 }
 
@@ -103,7 +121,7 @@ func (w *Writer) Flush(ctx context.Context, rows []LogRow) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	args := make([]any, 0, len(rows)*7)
+	args := make([]any, 0, len(rows)*8)
 	seen := map[string]struct{}{}
 	ids := make([]string, 0)
 	for _, r := range rows {
@@ -111,7 +129,7 @@ func (w *Writer) Flush(ctx context.Context, rows []LogRow) ([]string, error) {
 		if r.Fields == nil {
 			fj = []byte("{}")
 		}
-		args = append(args, r.TraceID, nullStr(r.SpanID), r.Service, r.Level, r.Message, r.Timestamp, string(fj))
+		args = append(args, r.TraceID, nullStr(r.SpanID), r.Service, r.Level, r.Message, r.Timestamp, string(fj), nullStr(r.RedisMsgID))
 		if _, ok := seen[r.TraceID]; !ok {
 			seen[r.TraceID] = struct{}{}
 			ids = append(ids, r.TraceID)

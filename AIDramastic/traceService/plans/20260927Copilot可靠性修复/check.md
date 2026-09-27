@@ -5,7 +5,7 @@
 - [ ] LSP/测试通过
 - [ ] PEL 回收
 - [x] flush/关机
-- [ ] ACK
+- [x] ACK
 - [ ] list 可靠
 - [ ] MAXLEN
 - [ ] TRACE_SQLITE_PATH

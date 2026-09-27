@@ -1,6 +1,8 @@
 package consumer
 
 import (
+	"context"
+	"errors"
 	"path/filepath"
 	"testing"
 
@@ -30,8 +32,11 @@ func TestAppendStreamMessages(t *testing.T) {
 	if r.pending[0] != "1-0" || r.pending[1] != "3-0" {
 		t.Fatalf("pending=%v", r.pending)
 	}
-	if r.buf[0].TraceID != "t1" {
+	if r.buf[0].TraceID != "t1" || r.buf[0].RedisMsgID != "1-0" {
 		t.Fatalf("row=%+v", r.buf[0])
+	}
+	if r.buf[1].RedisMsgID != "3-0" {
+		t.Fatalf("row1=%+v", r.buf[1])
 	}
 }
 
@@ -48,7 +53,6 @@ func TestClaimCountDefaultsToBatchSize(t *testing.T) {
 		t.Fatalf("got %d", r.claimCount())
 	}
 }
-
 
 func TestFlushOnShutdownEmptyOK(t *testing.T) {
 	r := &Runner{cfg: &config.Config{}}
@@ -77,5 +81,90 @@ func TestFlushOnShutdownReturnsFlushError(t *testing.T) {
 	}
 	if err := r.flushOnShutdown(); err == nil {
 		t.Fatal("expected flush error after closed writer")
+	}
+}
+
+func TestFlushKeepsPendingOnAckFailure(t *testing.T) {
+	dir := t.TempDir()
+	w, err := writer.Open(config.SqliteConfig{
+		Path:          filepath.Join(dir, "t.db"),
+		BusyTimeoutMs: 1000,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+
+	ackCalls := 0
+	r := &Runner{
+		cfg: &config.Config{Redis: config.RedisConfig{QueueType: "stream", QueueKey: "q", Group: "g"}},
+		w:   w,
+		buf: []writer.LogRow{{
+			TraceID: "t1", Service: "s", Level: "INFO", Message: "m", Timestamp: "ts",
+			RedisMsgID: "1-0",
+		}},
+		pending: []string{"1-0"},
+		xAck: func(ctx context.Context, ids ...string) error {
+			ackCalls++
+			return errors.New("redis down")
+		},
+	}
+	if err := r.flush(context.Background()); err == nil {
+		t.Fatal("expected xack error")
+	}
+	if len(r.buf) != 1 || len(r.pending) != 1 || r.pending[0] != "1-0" {
+		t.Fatalf("should keep buf/pending: buf=%d pending=%v", len(r.buf), r.pending)
+	}
+	if ackCalls != 1 {
+		t.Fatalf("ackCalls=%d", ackCalls)
+	}
+
+	// idempotent retry then successful ack clears
+	r.xAck = func(ctx context.Context, ids ...string) error {
+		ackCalls++
+		return nil
+	}
+	if err := r.flush(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(r.buf) != 0 || len(r.pending) != 0 {
+		t.Fatalf("should clear after ack ok: buf=%d pending=%v", len(r.buf), r.pending)
+	}
+	if ackCalls != 2 {
+		t.Fatalf("ackCalls=%d", ackCalls)
+	}
+}
+
+func TestFlushClearsPendingOnAckSuccess(t *testing.T) {
+	dir := t.TempDir()
+	w, err := writer.Open(config.SqliteConfig{
+		Path:          filepath.Join(dir, "t.db"),
+		BusyTimeoutMs: 1000,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+
+	r := &Runner{
+		cfg: &config.Config{Redis: config.RedisConfig{QueueType: "stream"}},
+		w:   w,
+		buf: []writer.LogRow{{
+			TraceID: "t1", Service: "s", Level: "INFO", Message: "m", Timestamp: "ts",
+			RedisMsgID: "9-0",
+		}},
+		pending: []string{"9-0"},
+		xAck: func(ctx context.Context, ids ...string) error {
+			if len(ids) != 1 || ids[0] != "9-0" {
+				t.Fatalf("ids=%v", ids)
+			}
+			return nil
+		},
+	}
+	if err := r.flush(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(r.buf) != 0 || len(r.pending) != 0 {
+		t.Fatalf("buf=%d pending=%v", len(r.buf), r.pending)
 	}
 }

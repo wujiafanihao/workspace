@@ -23,18 +23,20 @@ log = get_logger(__name__)
 
 DDL = """
 CREATE TABLE IF NOT EXISTS logs (
-  id           INTEGER PRIMARY KEY AUTOINCREMENT,
-  trace_id     TEXT    NOT NULL,
-  span_id      TEXT,
-  service      TEXT    NOT NULL,
-  level        TEXT    NOT NULL,
-  message      TEXT    NOT NULL,
-  timestamp    TEXT    NOT NULL,
-  fields_json  TEXT,
-  created_at   TEXT    NOT NULL DEFAULT (datetime('now'))
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  trace_id      TEXT    NOT NULL,
+  span_id       TEXT,
+  service       TEXT    NOT NULL,
+  level         TEXT    NOT NULL,
+  message       TEXT    NOT NULL,
+  timestamp     TEXT    NOT NULL,
+  fields_json   TEXT,
+  redis_msg_id  TEXT,
+  created_at    TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_logs_trace_id ON logs(trace_id);
 CREATE INDEX IF NOT EXISTS idx_logs_trace_ts ON logs(trace_id, timestamp);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_logs_redis_msg_id ON logs(redis_msg_id);
 """
 
 
@@ -48,6 +50,14 @@ async def ensure_schema(db_path: str) -> None:
     async with aiosqlite.connect(db_path) as db:
         await db.execute(f"PRAGMA busy_timeout={SQLITE_BUSY_TIMEOUT_MS}")
         await db.executescript(DDL)
+        # 旧库补列；列已存在时忽略
+        try:
+            await db.execute("ALTER TABLE logs ADD COLUMN redis_msg_id TEXT")
+        except Exception:
+            pass
+        await db.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_logs_redis_msg_id ON logs(redis_msg_id)"
+        )
         await db.commit()
     log.info("sqlite schema ensured (read-side)", extra={"fields": {"path": db_path}})
 

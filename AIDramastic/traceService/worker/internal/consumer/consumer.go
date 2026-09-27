@@ -23,7 +23,9 @@ type Runner struct {
 	w       *writer.Writer
 	inv     *cache.Invalidator
 	buf     []writer.LogRow
-	pending []string // stream message ids
+	pending []string // stream message ids；仅在 XAck 成功后清空
+	// xAck 可选；单测注入失败/成功行为。nil 时走 rdb.XAck。
+	xAck func(ctx context.Context, ids ...string) error
 }
 
 // New 构造 Runner。
@@ -170,6 +172,7 @@ func (r *Runner) appendStreamMessages(msgs []redis.XMessage) (badIDs []string) {
 			badIDs = append(badIDs, msg.ID)
 			continue
 		}
+		row.RedisMsgID = msg.ID
 		r.buf = append(r.buf, row)
 		r.pending = append(r.pending, msg.ID)
 	}
@@ -242,6 +245,16 @@ func (r *Runner) pollList(ctx context.Context) error {
 	return nil
 }
 
+func (r *Runner) ackPending(ctx context.Context) error {
+	if len(r.pending) == 0 {
+		return nil
+	}
+	if r.xAck != nil {
+		return r.xAck(ctx, r.pending...)
+	}
+	return r.rdb.XAck(ctx, r.cfg.Redis.QueueKey, r.cfg.Redis.Group, r.pending...).Err()
+}
+
 func (r *Runner) flush(ctx context.Context) error {
 	if len(r.buf) == 0 {
 		return nil
@@ -250,9 +263,17 @@ func (r *Runner) flush(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	_ = r.inv.Invalidate(ctx, ids)
+	if r.inv != nil {
+		_ = r.inv.Invalidate(ctx, ids) // best-effort；本提交不扩展 cache 重试
+	}
 	if r.cfg.Redis.QueueType == "stream" && len(r.pending) > 0 {
-		_ = r.rdb.XAck(ctx, r.cfg.Redis.QueueKey, r.cfg.Redis.Group, r.pending...).Err()
+		if err := r.ackPending(ctx); err != nil {
+			wlog.Error("xack failed; keeping pending for retry", "", map[string]any{
+				"err": err.Error(), "pending": len(r.pending),
+			})
+			// SQLite 已用 redis_msg_id 幂等写入；不清空 buf/pending，下次 flush 安全重试
+			return fmt.Errorf("xack: %w", err)
+		}
 	}
 	for _, id := range ids {
 		wlog.Info("flushed batch", id, map[string]any{"rows": len(r.buf)})

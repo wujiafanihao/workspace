@@ -163,19 +163,21 @@ PRAGMA journal_mode=WAL;
 PRAGMA busy_timeout=5000;
 
 CREATE TABLE IF NOT EXISTS logs (
-  id           INTEGER PRIMARY KEY AUTOINCREMENT,
-  trace_id     TEXT    NOT NULL,
-  span_id      TEXT,
-  service      TEXT    NOT NULL,
-  level        TEXT    NOT NULL,
-  message      TEXT    NOT NULL,
-  timestamp    TEXT    NOT NULL,
-  fields_json  TEXT,
-  created_at   TEXT    NOT NULL DEFAULT (datetime('now'))
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  trace_id      TEXT    NOT NULL,
+  span_id       TEXT,
+  service       TEXT    NOT NULL,
+  level         TEXT    NOT NULL,
+  message       TEXT    NOT NULL,
+  timestamp     TEXT    NOT NULL,
+  fields_json   TEXT,
+  redis_msg_id  TEXT,
+  created_at    TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_logs_trace_id ON logs(trace_id);
 CREATE INDEX IF NOT EXISTS idx_logs_trace_ts ON logs(trace_id, timestamp);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_logs_redis_msg_id ON logs(redis_msg_id);
 ```
 
 说明：写入**仅 Worker**；API 进程只用只读连接查询（可复议共享路径但避免多写）。
