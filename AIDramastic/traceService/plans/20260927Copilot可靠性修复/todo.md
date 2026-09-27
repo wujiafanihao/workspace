@@ -2,7 +2,8 @@
 
 - [ ] plans/check in_progress
 - [x] Go consumer: PEL reclaim via XAUTOCLAIM
-- [ ] Go consumer: ack, shutdown, list reliable, maxlen
+- [x] Go consumer: shutdown flush surfaces error (non-zero exit)
+- [ ] Go consumer: ack, list reliable, maxlen
 - [x] Go config: claim_min_idle_ms / claim_count
 - [ ] Go config: TRACE_SQLITE_PATH, maxlen
 - [ ] Go writer: msg_id 幂等（若改 schema）

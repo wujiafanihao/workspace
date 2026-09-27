@@ -1,11 +1,13 @@
 package consumer
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/redis/go-redis/v9"
 
 	"aidramastic/traceService/worker/internal/config"
+	"aidramastic/traceService/worker/internal/writer"
 )
 
 func TestAppendStreamMessages(t *testing.T) {
@@ -44,5 +46,36 @@ func TestClaimCountDefaultsToBatchSize(t *testing.T) {
 	r.cfg.Redis.ClaimCount = 7
 	if r.claimCount() != 7 {
 		t.Fatalf("got %d", r.claimCount())
+	}
+}
+
+
+func TestFlushOnShutdownEmptyOK(t *testing.T) {
+	r := &Runner{cfg: &config.Config{}}
+	if err := r.flushOnShutdown(); err != nil {
+		t.Fatalf("empty buf: %v", err)
+	}
+}
+
+func TestFlushOnShutdownReturnsFlushError(t *testing.T) {
+	dir := t.TempDir()
+	w, err := writer.Open(config.SqliteConfig{
+		Path:          filepath.Join(dir, "t.db"),
+		BusyTimeoutMs: 1000,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = w.Close()
+
+	r := &Runner{
+		cfg: &config.Config{Redis: config.RedisConfig{QueueType: "list"}},
+		w:   w,
+		buf: []writer.LogRow{{
+			TraceID: "t1", Service: "s", Level: "INFO", Message: "m", Timestamp: "ts",
+		}},
+	}
+	if err := r.flushOnShutdown(); err == nil {
+		t.Fatal("expected flush error after closed writer")
 	}
 }

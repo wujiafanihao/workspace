@@ -63,7 +63,19 @@ func indexOf(s, sub string) int {
 	return -1
 }
 
-// Run 阻塞直到 ctx 取消；退出前 flush。
+// flushOnShutdown 用带超时的 background context 做关机 flush，避免 cancel 立即打断落库。
+// flush 失败时记 error 并返回该错误（调用方应非 0 退出）。
+func (r *Runner) flushOnShutdown() error {
+	flushCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := r.flush(flushCtx); err != nil {
+		wlog.Error("shutdown flush failed", "", map[string]any{"err": err.Error()})
+		return err
+	}
+	return nil
+}
+
+// Run 阻塞直到 ctx 取消；退出前 flush。flush 失败则返回 error。
 func (r *Runner) Run(ctx context.Context) error {
 	if err := r.ensureGroup(ctx); err != nil {
 		return fmt.Errorf("ensure group: %w", err)
@@ -78,7 +90,9 @@ func (r *Runner) Run(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
-			_ = r.flush(context.Background())
+			if err := r.flushOnShutdown(); err != nil {
+				return err
+			}
 			wlog.Info("go worker stopping", "", nil)
 			return nil
 		case <-ticker.C:
@@ -90,8 +104,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		default:
 			if err := r.poll(ctx); err != nil {
 				if ctx.Err() != nil {
-					_ = r.flush(context.Background())
-					return nil
+					return r.flushOnShutdown()
 				}
 				wlog.Error("poll failed", "", map[string]any{"err": err.Error()})
 				time.Sleep(200 * time.Millisecond)
