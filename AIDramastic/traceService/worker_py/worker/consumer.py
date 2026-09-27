@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import json
 from typing import Any
+from urllib.parse import quote
 
 import redis.asyncio as aioredis
 
@@ -31,7 +32,7 @@ def _redis_url(cfg: WorkerConfig) -> str:
     host, _, port = cfg.redis.addr.partition(":")
     port = port or "6379"
     if cfg.redis.password:
-        return f"redis://:{cfg.redis.password}@{host}:{port}/0"
+        return f"redis://:{quote(cfg.redis.password, safe='')}@{host}:{port}/0"
     return f"redis://{host}:{port}/0"
 
 
