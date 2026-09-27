@@ -184,6 +184,7 @@
 7. 是否有 `log/` + 统一 logger？是否可观测（级别/trace/错误码）？
 8. 文件头与函数注释是否写好？
 9. 是否已准备同名测试文件并实际跑通？
+10. 是否已基于指定远程分支新建自己的 `feat/<年月日>-<需求名>` 分支（不复用/不合入他人分支）？
 
 ---
 
@@ -202,12 +203,45 @@
 - [ ] 错误码封装；错误不拖垮进程；Go 业务无 panic
 - [ ] 一一对应的测试文件存在且通过（对应 `check` 的 `tests` 阶段）
 - [ ] 未把密钥、`.env`、构建产物、大量日志提交进 git
+- [ ] 一功能一分支：改动在自己的 `feat/<...>` 上，未合入 `AIDramastic` 等他人分支；文档类改动已在 `main` 落地并 push
 
 ---
 
-## 13. 禁止事项（摘要）
+## 13. Git 分支与 MR 约定（硬性）
+
+**一功能一分支**：一个需求 = 一条 `feat/<年月日>-<需求名>` 分支，分支名与 `plans/<年月日><需求名>/` 对应。
+
+### 13.1 分支归属
+
+| 分支 | 归属 | 规则 |
+| --- | --- | --- |
+| `main` | 全员基线 | 承接已完成（`check.md` = `archive`）的需求；工作空间级文档/协议改动可直接在 `main` 写并 push；不在 `main` 上开发功能代码 |
+| `AIDramastic` | owner：jiafawu | 他人**只能通过 MR** 请求合入；**禁止把 `feat/*` 合入该分支，禁止直接 push** |
+| `feat/<年月日>-<需求名>` | 该需求开发者本人 | 开发、自测、push 远程同名分支；只与自己的分支集成 |
+
+### 13.2 建分支与合入路径
+
+1. **可基于指定远程分支新建分支**：`git fetch origin` 后 `git checkout -b feat/<...> origin/main`（需要 AIDramastic 基线时用 `origin/AIDramastic`）。
+   「基于某分支」只表示**起点**，不表示该分支是**归属**。
+2. **自己的 feat 只合入自己的特性分支**，禁止合入 jiafawu 创建的 `AIDramastic` 分支；需要其代码就「基于它切分支」或「提 MR」，不反向 merge。
+3. 工作空间级改动（文档/协议/脚本）：在 `main` 上写 → `git push origin main`。
+4. 需落到 `AIDramastic` 的内容：向本地 `AIDramastic` 分支提 MR（target = `AIDramastic`），owner 评审后再合入。
+
+### 13.3 流程
+
+```text
+fetch → 基于指定远程分支切 feat 分支 → 建 plans 四件套 → 开发 + 测试 + push
+      → check.md 到 archive → 合入 main 并 push → 向本地 AIDramastic 提 MR（如需）
+```
+
+---
+
+## 14. 禁止事项（摘要）
 
 - 意图未确认就大范围编码  
+- 一条分支堆多个需求；在 `main` 上直接开发功能代码  
+- 把自己的 `feat/*` 合入他人（jiafawu）创建的 `AIDramastic` 分支，或直接 push 该分支  
+- 绕过 MR 自行 merge 到 `AIDramastic`  
 - 无 `plans/<年月日><需求名称>/` 四件套就开工或交付  
 - `check.md` 未到 `archive` 就提交 / 提 MR  
 - 绕过 LSP 规范硬刚格式  
