@@ -26,6 +26,8 @@ class RedisCfg:
     queue_type: str = "stream"
     group: str = "trace-ingest-workers"
     consumer: str = "py-worker-1"
+    claim_min_idle_ms: int = 60000  # PEL 最小空闲毫秒，XAUTOCLAIM min_idle_time
+    claim_count: int = 0  # 每次 claim 条数；<=0 则用 max_batch
 
 
 @dataclass
@@ -52,6 +54,11 @@ def load_config(path: str | Path | None = None) -> WorkerConfig:
     n = raw.get("normalize") or {}
     addr_env = r.get("addr_env", "REDIS_ADDR")
     password_env = r.get("password_env", "REDIS_PASSWORD")
+    claim_min_idle_ms = int(r.get("claim_min_idle_ms", 60000) or 60000)
+    if claim_min_idle_ms <= 0:
+        claim_min_idle_ms = 60000
+    # claim_count <= 0：运行时回退到 normalize.max_batch
+    claim_count = int(r.get("claim_count", 0) or 0)
     return WorkerConfig(
         redis=RedisCfg(
             addr=os.environ.get(addr_env) or DEFAULT_REDIS_ADDR,
@@ -61,6 +68,8 @@ def load_config(path: str | Path | None = None) -> WorkerConfig:
             queue_type=str(r.get("queue_type", "stream")),
             group=str(r.get("group", "trace-ingest-workers")),
             consumer=str(r.get("consumer", "py-worker-1")),
+            claim_min_idle_ms=claim_min_idle_ms,
+            claim_count=claim_count,
         ),
         normalize=NormalizeCfg(
             max_batch=int(n.get("max_batch", 100)),
