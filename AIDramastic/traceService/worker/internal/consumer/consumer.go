@@ -1,5 +1,5 @@
 // Package consumer 消费 trace:persist 并批量落库。
-// 负责：XREADGROUP/BRPOP、批缓冲、调用 writer + cache。
+// 负责：XREADGROUP/XAUTOCLAIM/BRPOP、批缓冲、调用 writer + cache。
 // 不负责：HTTP。依赖：go-redis、writer、cache。
 package consumer
 
@@ -18,11 +18,11 @@ import (
 
 // Runner 消费循环。
 type Runner struct {
-	cfg    *config.Config
-	rdb    *redis.Client
-	w      *writer.Writer
-	inv    *cache.Invalidator
-	buf    []writer.LogRow
+	cfg     *config.Config
+	rdb     *redis.Client
+	w       *writer.Writer
+	inv     *cache.Invalidator
+	buf     []writer.LogRow
 	pending []string // stream message ids
 }
 
@@ -123,7 +123,69 @@ func (r *Runner) poll(ctx context.Context) error {
 	return r.pollStream(ctx)
 }
 
+// claimCount 返回本轮 XAUTOCLAIM Count；未配置 claim_count 时用 batch_size。
+func (r *Runner) claimCount() int64 {
+	if r.cfg.Redis.ClaimCount > 0 {
+		return int64(r.cfg.Redis.ClaimCount)
+	}
+	return int64(r.cfg.Sqlite.BatchSize)
+}
+
+// claimPending 用 XAUTOCLAIM 回收空闲 PEL，再按新消息同样入库缓冲。
+func (r *Runner) claimPending(ctx context.Context) error {
+	msgs, _, err := r.rdb.XAutoClaim(ctx, &redis.XAutoClaimArgs{
+		Stream:   r.cfg.Redis.QueueKey,
+		Group:    r.cfg.Redis.Group,
+		Consumer: r.cfg.Redis.Consumer,
+		MinIdle:  time.Duration(r.cfg.Redis.ClaimMinIdleMs) * time.Millisecond,
+		Start:    "0-0",
+		Count:    r.claimCount(),
+	}).Result()
+	if err != nil {
+		return err
+	}
+	return r.ingestStreamMessages(ctx, msgs)
+}
+
+// appendStreamMessages 将 claim/read 得到的消息解析进 buf/pending。
+// 返回无法解析、应 XACK 丢弃的 id 列表（纯逻辑，便于单测，不触 Redis）。
+func (r *Runner) appendStreamMessages(msgs []redis.XMessage) (badIDs []string) {
+	for _, msg := range msgs {
+		payload, _ := msg.Values["payload"].(string)
+		row, err := writer.ParsePayload(payload)
+		if err != nil {
+			badIDs = append(badIDs, msg.ID)
+			continue
+		}
+		r.buf = append(r.buf, row)
+		r.pending = append(r.pending, msg.ID)
+	}
+	return badIDs
+}
+
+// ingestStreamMessages 解析消息、ACK 坏包，缓冲满则 flush。
+func (r *Runner) ingestStreamMessages(ctx context.Context, msgs []redis.XMessage) error {
+	if len(msgs) == 0 {
+		return nil
+	}
+	badIDs := r.appendStreamMessages(msgs)
+	for _, id := range badIDs {
+		// 坏消息 ACK 丢弃
+		_ = r.rdb.XAck(ctx, r.cfg.Redis.QueueKey, r.cfg.Redis.Group, id).Err()
+	}
+	if len(r.buf) >= r.cfg.Sqlite.BatchSize {
+		if err := r.flush(ctx); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (r *Runner) pollStream(ctx context.Context) error {
+	// 先回收崩溃后卡在 PEL 的空闲条目，再读新消息 (">")。
+	if err := r.claimPending(ctx); err != nil {
+		return err
+	}
 	res, err := r.rdb.XReadGroup(ctx, &redis.XReadGroupArgs{
 		Group:    r.cfg.Redis.Group,
 		Consumer: r.cfg.Redis.Consumer,
@@ -138,21 +200,8 @@ func (r *Runner) pollStream(ctx context.Context) error {
 		return err
 	}
 	for _, stream := range res {
-		for _, msg := range stream.Messages {
-			payload, _ := msg.Values["payload"].(string)
-			row, err := writer.ParsePayload(payload)
-			if err != nil {
-				// 坏消息 ACK 丢弃
-				_ = r.rdb.XAck(ctx, r.cfg.Redis.QueueKey, r.cfg.Redis.Group, msg.ID).Err()
-				continue
-			}
-			r.buf = append(r.buf, row)
-			r.pending = append(r.pending, msg.ID)
-			if len(r.buf) >= r.cfg.Sqlite.BatchSize {
-				if err := r.flush(ctx); err != nil {
-					return err
-				}
-			}
+		if err := r.ingestStreamMessages(ctx, stream.Messages); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -199,5 +248,3 @@ func (r *Runner) flush(ctx context.Context) error {
 	r.pending = r.pending[:0]
 	return nil
 }
-
-// unused import guard

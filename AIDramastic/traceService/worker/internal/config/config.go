@@ -20,13 +20,15 @@ type Config struct {
 
 // RedisConfig Redis 与消费者组。
 type RedisConfig struct {
-	AddrEnv   string `yaml:"addr_env"`
-	QueueKey  string `yaml:"queue_key"`
-	QueueType string `yaml:"queue_type"`
-	Group     string `yaml:"group"`
-	Consumer  string `yaml:"consumer"`
-	Addr      string `yaml:"-"`
-	Password  string `yaml:"-"`
+	AddrEnv        string `yaml:"addr_env"`
+	QueueKey       string `yaml:"queue_key"`
+	QueueType      string `yaml:"queue_type"`
+	Group          string `yaml:"group"`
+	Consumer       string `yaml:"consumer"`
+	ClaimMinIdleMs int    `yaml:"claim_min_idle_ms"` // PEL 最小空闲毫秒，XAUTOCLAIM MinIdle
+	ClaimCount     int    `yaml:"claim_count"`       // 每次 claim 条数；<=0 则用 batch_size
+	Addr           string `yaml:"-"`
+	Password       string `yaml:"-"`
 }
 
 // SqliteConfig 本地库路径与批量参数。
@@ -82,6 +84,10 @@ func Load(path string) (*Config, error) {
 	if cfg.Redis.Consumer == "" {
 		cfg.Redis.Consumer = "go-worker-1"
 	}
+	if cfg.Redis.ClaimMinIdleMs <= 0 {
+		cfg.Redis.ClaimMinIdleMs = 60000
+	}
+	// ClaimCount <= 0：运行时回退到 sqlite.batch_size
 	if cfg.Sqlite.Path == "" {
 		cfg.Sqlite.Path = "../backend/data/logs.db"
 	}
