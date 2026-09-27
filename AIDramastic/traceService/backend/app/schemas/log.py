@@ -30,13 +30,24 @@ class LogIn(BaseModel):
     timestamp: str = Field(..., min_length=1)
     fields: Optional[dict[str, Any]] = None
 
+    @field_validator("trace_id", "service", "level", "timestamp", mode="before")
+    @classmethod
+    def _strip_required_text(cls, v: Any) -> Any:
+        """Strip required text fields and reject values blank after stripping."""
+        if isinstance(v, str):
+            value = v.strip()
+            if not value:
+                raise ValueError("must not be blank")
+            return value
+        return v
+
     @model_validator(mode="after")
     def _resolve_message(self) -> "LogIn":
         """将 msg 映射到 message；二者皆空则失败。"""
         text = self.message if self.message is not None else self.msg
         if text is None or str(text).strip() == "":
             raise ValueError("message or msg is required")
-        self.message = str(text)
+        self.message = str(text).strip()
         return self
 
     @field_validator("fields")

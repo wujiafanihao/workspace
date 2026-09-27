@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import aiosqlite
 import pytest
 
@@ -39,6 +41,56 @@ async def test_ingest_enqueue_only(api_client):
         cur = await db.execute("SELECT COUNT(*) FROM logs")
         (count,) = await cur.fetchone()
         assert count == 0
+
+
+@pytest.mark.asyncio
+async def test_ingest_rejects_whitespace_trace_id_with_serializable_errors(api_client):
+    client, _, _ = api_client
+    r = await client.post(
+        "/api/v1/logs/ingest",
+        json={
+            "logs": [
+                {
+                    "trace_id": "   ",
+                    "service": "gateway",
+                    "level": "INFO",
+                    "message": "hi",
+                    "timestamp": "2026-09-27T22:00:00+08:00",
+                }
+            ]
+        },
+    )
+    assert r.status_code == 400
+    body = r.json()
+    assert body["code"] == 40001
+    assert isinstance(body["data"]["errors"][0]["ctx"]["error"], str)
+
+
+@pytest.mark.asyncio
+async def test_ingest_strips_required_fields_and_message(api_client):
+    client, fake, _ = api_client
+    r = await client.post(
+        "/api/v1/logs/ingest",
+        json={
+            "logs": [
+                {
+                    "trace_id": "  tid  ",
+                    "service": " gateway ",
+                    "level": " INFO ",
+                    "message": " hello ",
+                    "timestamp": " 2026-09-27T22:00:00+08:00 ",
+                }
+            ]
+        },
+    )
+    assert r.status_code == 200
+    entries = await fake.xrange("trace:ingest")
+    payload = json.loads(entries[0][1]["payload"])
+    assert payload["trace_id"] == "tid"
+    assert payload["service"] == "gateway"
+    assert payload["level"] == "INFO"
+    assert payload["message"] == "hello"
+    assert payload["timestamp"] == "2026-09-27T22:00:00+08:00"
 
 
 @pytest.mark.asyncio

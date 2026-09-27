@@ -11,4 +11,5 @@
 - [ ] TRACE_SQLITE_PATH
 - [ ] mq.sh pid
 - [ ] password encode
-- [ ] validation/strip/cache
+- [x] validation/strip
+- [ ] cache invalidate
