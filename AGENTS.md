@@ -219,7 +219,20 @@
 | `AIDramastic` | owner：jiafawu | 他人**只能通过 MR** 请求合入；**禁止把 `feat/*` 合入该分支，禁止直接 push** |
 | `feat/<年月日>-<需求名>` | 该需求开发者本人 | 开发、自测、push 远程同名分支；只与自己的分支集成 |
 
-### 13.2 建分支与合入路径
+### 13.2 权限规则（谁能点「合并」）
+
+按**分支归属**定权，不按仓库定权：
+
+| 分支 | 谁能提 MR | 谁能执行合并 |
+| --- | --- | --- |
+| jiafawu 创建的分支（`main`、`AIDramastic` 等） | 任何人 | **仅 jiafawu**（提 MR / 合并 / push 全权限） |
+| 他人创建的远程分支（`feat/<年月日>-<需求名>`） | 任何人 | **创建者本人 + jiafawu** |
+
+一句话：**合并权 = 分支创建者 ∪ jiafawu；其余人只能提 MR，不能点合并。**
+`.github/CODEOWNERS` 为 `* @wujiafanihao`，所有改动需 jiafawu review 后由其合并。
+推论：Agent 或协作者**不得**宣称「已合并到 `AIDramastic` / `main`」，只能说「已提 MR，等待 jiafawu 合并」。
+
+### 13.3 建分支与合入路径
 
 1. **可基于指定远程分支新建分支**：`git fetch origin` 后 `git checkout -b feat/<...> origin/main`（需要 AIDramastic 基线时用 `origin/AIDramastic`）。
    「基于某分支」只表示**起点**，不表示该分支是**归属**。
@@ -227,7 +240,7 @@
 3. 工作空间级改动（文档/协议/脚本）：在 `main` 上写 → `git push origin main`。
 4. 需落到 `AIDramastic` 的内容：向本地 `AIDramastic` 分支提 MR（target = `AIDramastic`），owner 评审后再合入。
 
-### 13.3 流程
+### 13.4 流程
 
 ```text
 fetch → 基于指定远程分支切 feat 分支 → 建 plans 四件套 → 开发 + 测试 + push
