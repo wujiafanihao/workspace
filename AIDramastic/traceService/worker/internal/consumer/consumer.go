@@ -306,9 +306,6 @@ func (r *Runner) flush(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if r.inv != nil {
-		_ = r.inv.Invalidate(ctx, ids) // best-effort；本提交不扩展 cache 重试
-	}
 	if r.cfg.Redis.QueueType == "stream" && len(r.pending) > 0 {
 		if err := r.ackPending(ctx); err != nil {
 			wlog.Error("xack failed; keeping pending for retry", "", map[string]any{
@@ -325,6 +322,16 @@ func (r *Runner) flush(ctx context.Context) error {
 					"err": err.Error(), "pending": len(r.pending),
 				})
 				return fmt.Errorf("lrem: %w", err)
+			}
+		}
+	}
+	if r.inv != nil {
+		if err := r.inv.Invalidate(ctx, ids); err != nil {
+			// SQLite 已持久化且消息已确认；缓存只是软一致性，不能阻塞 ACK。
+			for _, id := range ids {
+				wlog.Error("cache invalidate failed after retries; continuing flush", id, map[string]any{
+					"err": err.Error(),
+				})
 			}
 		}
 	}

@@ -12,4 +12,4 @@
 - [ ] mq.sh pid
 - [x] password encode
 - [x] validation/strip
-- [ ] cache invalidate
+- [x] cache invalidate
