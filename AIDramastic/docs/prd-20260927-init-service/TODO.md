@@ -1,12 +1,14 @@
 # AIDramastic MVP 脚手架落地 Checklist
 
+> **背景摘要**：本清单落地「可编译、可联调」的 MVP 框架（mock AI）。主业务：**Go + MySQL + Redis（队列/缓存）+ Vue3**；ai-svc = **API + Go Worker**。可观测：独立 `traceService`（**FastAPI + Python Worker + Go Worker + Redis + SQLite**），业务侧异步上报、不阻塞。详见 [`BACKGROUND.md`](BACKGROUND.md) / [`PRD.md`](PRD.md) / [`DESIGN.md`](DESIGN.md)；宪法 [`AGENTS.md`](../../AGENTS.md)（含 **§K 队列与 Worker**）。
+
 > 按顺序执行；全部勾选即 MVP 框架可本地联调。依据同目录 `PRD.md` / `CODING_STANDARDS.md`。
 
 ---
 
 ## A. 仓库与规范文档确认
 
-- [ ] 确认本目录三份文档齐备：`PRD.md`、`CODING_STANDARDS.md`、`TODO.md`
+- [ ] 确认本目录文档齐备：`BACKGROUND.md`、`PRD.md`、`DESIGN.md`、`CODING_STANDARDS.md`、`TODO.md`、`README.md`
 - [ ] 确认仓库骨架目录存在：`app/application`、`app/shared`、`protocol/application`、`protocol/shared`、`web/`、`docs/`、`traceService/`
 - [ ] 确认根目录 `AGENTS.md`、`README.md`、`.gitignore` 已填写
 - [ ] 确认 Go module 路径（`go.mod`）并在文档/Makefile 中统一引用
@@ -62,16 +64,30 @@
 
 ---
 
-## F. ai-svc 骨架 + Provider Registry + mock drivers
+## F. ai-svc 骨架 + Provider Registry + mock drivers + Redis 队列
 
 - [ ] 定义 `LLMProvider` / `ImageProvider` / `VideoProvider` 接口与请求/响应结构体
 - [ ] 实现 `mock` driver（llm/image/video）：短延迟 + 固定 stub JSON/`asset_url`
 - [ ] Registry：`(element_type, capacity)` 索引；yaml 加载；`enabled=false` 跳过
 - [ ] 热更：watch yaml 重建 Registry，失败保留旧 Registry + Error 日志
-- [ ] `ai_jobs` 表 + repo；RPC 创建 job 后投递内存队列/goroutine worker
-- [ ] 实现 ExtractChapterAssets / GenerateCharacterImage / GenerateSceneImage / SplitStoryboards / GenerateShotVideo / GetJob / ListJobs
-- [ ] Job 锁 key 约定落地（单实例可简化，代码留 Redis 锁接口）
+- [ ] `ai_jobs` 表 + repo
+- [ ] **API 进程** `cmd/server`：RPC 创建 job（MySQL pending）→ **XADD Redis Stream `ai:jobs`**（带 `job_id`/`trace_id`）→ 立即返回；GetJob/ListJobs 只查库
+- [ ] **禁止** handler/service 同步调 Provider（mock 也不例外）
+- [ ] 实现 ExtractChapterAssets / GenerateCharacterImage / GenerateSceneImage / SplitStoryboards / GenerateShotVideo / GetJob / ListJobs（API 侧）
+- [ ] Job 锁 key 约定落地（`ai:job:lock:{job_id}`）
 - [ ] 单测：Registry 查找与禁用；mock driver 返回非空结果
+
+---
+
+## F2. ai-worker（Go Worker 进程，强制）
+
+- [ ] `app/application/ai-svc/cmd/worker/main.go`：独立进程，加载同一套 yaml / Registry
+- [ ] 消费 Redis Stream `ai:jobs`（消费者组可复议）；解析 `job_id`/`trace_id`
+- [ ] 执行 Provider → 回写 MySQL `running`→`succeeded`/`failed` + `result_json`
+- [ ] 幂等（按 job_id）；有限重试；失败进死信约定（字段或独立 stream）
+- [ ] 日志带 `trace_id` + `job_id`；`service=ai-worker`
+- [ ] graceful shutdown；与 API 联调：创建 job 后 Worker 未启则 pending，启后追上
+- [ ] **确认无「进程内 goroutine 当默认 worker」代码路径**
 
 ---
 
@@ -123,32 +139,36 @@
 
 - [ ] 根 `README.md` 补充（若当前为空壳则填写）：项目简介一句话 + 链接到 `docs/prd-20260927-init-service/`
 - [ ] 写明前置：Go / Node / Docker 版本下限
-- [ ] 启动步骤：compose → env → make gen → 四服务启动命令 → web dev
+- [ ] 启动步骤：compose → env → make gen → 四 API 服务 + **ai-worker** → web dev（trace 另起 API+双 Worker）
 - [ ] 写明默认端口表：gateway HTTP、各 svc gRPC、MySQL、Redis、Vite
 - [ ] 写明「AI 均为 mock；换厂商只改 yaml + driver」
 - [ ] 不在 README 粘贴真实密钥
 
 ---
 
-## O. 可观测 / traceService（可并行）
+## O. 可观测 / traceService（可并行 · 两级队列 + 双 Worker）
 
-- [ ] 阅读根目录 `AGENTS.md` §D / §I 与 `traceService/README.md`
-- [ ] 按 `traceService/docs/PLAN.md` 实现后端骨架（FastAPI + YAML + `/healthz`）
-- [ ] 实现 SQLite `logs` 表 + `POST /api/v1/logs/ingest`
-- [ ] 实现 `GET /api/v1/logs?trace_id=`（时间升序）
+- [ ] 阅读根目录 `AGENTS.md` §D / §I / **§J** / **§K** 与 `traceService/README.md`、`traceService/docs/PRD.md`
+- [ ] 确认存储：主业务 MySQL；trace SQLite；Redis 两边都有队列
+- [ ] 确认目录：`backend/` + `worker_py/` + `worker/` + `frontend/`
+- [ ] 按 `traceService/docs/PLAN.md`：FastAPI 骨架 + YAML + `/healthz`
+- [ ] Redis：`trace:ingest` / `trace:persist` + 查询缓存 key 约定
+- [ ] `POST /api/v1/logs/ingest`：校验后**只写 `trace:ingest`**，立即返回（不写 SQLite）
+- [ ] **Python Worker**（`traceService/worker_py`）：消费 `trace:ingest` → 规范化/enrich → 入 `trace:persist`
+- [ ] **Go Worker**（`traceService/worker`）：消费 `trace:persist` → 批量写 SQLite（WAL）→ 维护 trace 缓存
+- [ ] `GET /api/v1/logs?trace_id=`：Redis 缓存 → SQLite → 回填；时间升序
 - [ ] （可选）`backend/scripts/gen_mock_logs.py` 模拟跨服务日志
 - [ ] Vue3 查询 Web：输入 `trace_id` + 时间线列表
-- [ ] CORS / 本地联调；更新 `traceService/README.md` 为可执行启动步骤
-- [ ] gateway：接入 `X-Trace-Id` 生成与透传；日志字段含 `trace_id`/`service`/`level`/`msg`/时间
-- [ ] 各 svc：gRPC interceptor / HTTP client 透传 `trace_id`；按默认约定 ingest 到 traceService
-- [ ] 联调验收：一次完整请求 → 用同一 `trace_id` 在 traceService Web 看到跨服务时间线
+- [ ] CORS / 本地联调；更新 `traceService/README.md`（含 **两个** Worker 启动）
+- [ ] gateway/各 svc：`X-Trace-Id` 透传；**异步** ingest（短超时、失败可丢）
+- [ ] 联调验收：完整请求 → 同一 `trace_id` 在 Web 见跨服务时间线；压测确认主路径不被 ingest 拖慢
 
 ---
 
 ## 完成定义（再勾一次）
 
-- [ ] 四后端 + web 本地可起
-- [ ] 注册登录 → 建项目 → 写章节 → 触发 Extract mock → GetJob succeeded
+- [ ] 四后端 API + **ai-worker** + web 本地可起
+- [ ] 注册登录 → 建项目 → 写章节 → 触发 Extract（入队）→ Worker 跑 mock → GetJob succeeded
 - [ ] 修改 `ai-svc.yaml` providers 后热更生效（或失败保留旧配置有日志）
 - [ ] 无真实密钥入库；无手改 pb.go
 - [ ] 任意请求带 `trace_id`；traceService 可按该 id 查到日志（O 节闭环）

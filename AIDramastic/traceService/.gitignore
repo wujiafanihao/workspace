@@ -36,3 +36,5 @@ logs/
 htmlcov/
 .coverage
 coverage.xml
+worker/bin/
+worker/worker

@@ -1,7 +1,6 @@
 # AIDramastic 开发规范（CODING STANDARDS）
 
-> 本文件用于定死工程约定。与 PRD 冲突时以「可运行 MVP + 本规范」为准；修改本文件需评审。  
-> 产品级约定（尤其 `trace_id` / 可观测 / AI 可插拔）另见仓库根 **`AGENTS.md`**：冲突时产品级约定以 AGENTS 优先说明；实现细节以 AGENTS + 本文件为准。
+> **背景摘要**：本文件服务 AIDramastic MVP 脚手架——Go 微服务（gateway/user/drama/ai）+ Vue3；主业务库 **MySQL**，Redis 作**队列**/缓存/黑名单；ai-svc = API + **Go Worker**。可观测走独立 `traceService`（FastAPI + **Python Worker** + **Go Worker** + Redis + **SQLite**）。产品故事与术语见同目录 [`BACKGROUND.md`](BACKGROUND.md)；需求见 [`PRD.md`](PRD.md)；系统设计见 [`DESIGN.md`](DESIGN.md)。冲突时产品级约定以仓库根 [`AGENTS.md`](../../AGENTS.md) 优先（含 §J 存储、**§K 队列与 Worker**）。
 
 ---
 
@@ -53,6 +52,7 @@ func (e *BizError) Error() string { /* ... */ }
 
 - 所有 RPC Handler、DB、Redis、HTTP 出站调用必须携带 `context.Context`。
 - 禁止裸 `go func()` 且丢弃 cancel；派生 goroutine 必须传入可取消的 ctx，并在服务 shutdown 时收敛。
+- **重活默认走 Redis 队列 + 独立 Worker 进程**（见 `AGENTS.md` §K）；禁止把「进程内 goroutine」当作 ai-svc / trace 的默认 Worker 架构。
 - 超时：对外 RPC/HTTP 在调用方设 timeout；DB 建议继承请求 ctx。
 
 ---
@@ -131,12 +131,15 @@ handler (gRPC/HTTP) → service → repo
 
 ---
 
-## 12. 并发与 Redis 约定
+## 12. 并发与 Redis 约定（队列强制）
 
 - **JWT 黑名单**：key 建议 `auth:jwt:blacklist:{jti}`，TTL = token 剩余有效期；Logout 写入；鉴权时存在即拒绝。
+- **AI 任务队列**（强制）：Stream 建议 `ai:jobs`；API 只 XADD；**Go Worker**（`cmd/worker`）消费；消息带 `job_id`/`trace_id`。
 - **Job 锁**（ai-svc worker）：key 建议 `ai:job:lock:{job_id}`，值 worker id，TTL 短（如 30s）并续租或完成即删；避免多实例重复执行。
-- MVP 单实例时可简化锁，但接口与 key 规范先定好，便于后扩。
+- **幂等 / 重试 / 死信**：按 job_id 幂等；有限次重试后进死信（实现细节可复议）。
+- MVP 单实例时可简化锁，但接口与 key / 队列规范先定好，便于后扩。
 - Redis 命令必须带 ctx；错误要返回给调用方或记任务失败，禁止静默。
+- 权威：`AGENTS.md` **§K**。
 
 ---
 
@@ -152,11 +155,12 @@ handler (gRPC/HTTP) → service → repo
 
 ## 14. 可观测与 trace_id
 
-> 权威细则与 Agent 强制规则见仓库根 [`AGENTS.md`](../../AGENTS.md) §D / §I；子系统说明见 [`traceService/`](../../traceService/)。本节省录，避免三份规范打架。
+> 权威细则与 Agent 强制规则见仓库根 [`AGENTS.md`](../../AGENTS.md) §D / §I / §J / **§K**；子系统说明见 [`traceService/`](../../traceService/)。本节省录，避免三份规范打架。
 
 1. 每个 HTTP / gRPC 请求必须有 `trace_id`（UUID）。客户端可传 `X-Trace-Id`；缺失由 gateway / 入口生成。
 2. 向下游 gRPC metadata / HTTP header 透传 `trace_id`（及 `x-user-id`）。
 3. 结构化日志**每条**必须带：`trace_id`、`service`、`level`、`msg`（或 `message`）、时间；推荐 JSON 一行一条。
-4. 日志进入 traceService 的 **MVP 默认**：HTTP `POST /api/v1/logs/ingest`；本地也可文件尾随采集（见 `traceService/docs/PLAN.md`）。
-5. 查日志：打开 traceService Web，按 `trace_id` 看跨服务时间线。
+4. 日志进入 traceService 的 **MVP 默认**：异步 HTTP `POST /api/v1/logs/ingest`（短超时、失败可丢）→ FastAPI 入 **`trace:ingest`** → **Python Worker** 规范化 → **`trace:persist`** → **Go Worker** 批量写 **SQLite**；本地也可文件尾随采集（非默认，见 `traceService/docs/PLAN.md`）。
+5. 查日志：打开 traceService Web，按 `trace_id` 看跨服务时间线（查询：Redis 缓存 → SQLite）。
 6. **禁止**依赖 Jaeger / ELK 才能开发；主业务服务不 import `traceService` 代码。
+7. 存储：主业务 **MySQL**；trace **SQLite**（见 `AGENTS.md` §J）。队列与 Worker：Go 与 Python **都**有（见 §K）。

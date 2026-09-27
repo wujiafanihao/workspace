@@ -11,19 +11,16 @@
 ```
 AIDramastic/
 ├── app/                      # Go 微服务实现
-│   ├── application/          # gateway / user-svc / drama-svc / ai-svc
-│   └── shared/               # config 热更、logger、errors、jwt、mysql、redis…
+│   ├── application/          # gateway / user-svc / drama-svc / ai-svc（含 cmd/server + cmd/worker）
+│   └── shared/               # config 热更、logger、errors、jwt、mysql、redis、queue…
 ├── protocol/                 # proto 源与生成代码
 │   ├── application/          # user / drama / ai
 │   └── shared/               # 公共消息、错误约定
 ├── web/                      # 主业务前端（Vue3）
-├── traceService/             # 独立可观测：按 trace_id 查跨服务日志（Python FastAPI + Vue3）
+├── traceService/             # 独立可观测：FastAPI + Python Worker + Go Worker + Vue3
 ├── configs/                  # 各服务 YAML 示例（落地后）
 ├── docs/
-│   └── prd-20260927-init-service/
-│       ├── PRD.md
-│       ├── CODING_STANDARDS.md
-│       └── TODO.md
+│   └── prd-20260927-init-service/   # BACKGROUND / PRD / DESIGN / CODING_STANDARDS / TODO / README
 ├── AGENTS.md                 # AI Agent / 人类工程宪法（编码权威入口）
 └── README.md
 ```
@@ -34,11 +31,11 @@ AIDramastic/
 
 | 层 | 技术 |
 |----|------|
-| 后端 | Go、gRPC、HTTP BFF（gateway）、MySQL、Redis |
+| 后端 | Go、gRPC、HTTP BFF（gateway）、**MySQL**（主业务库）、Redis（**队列**/缓存/JWT 黑名单）；ai-svc = **API + Go Worker** |
 | AI | Provider Registry；YAML `element_type` / `capacity` / `driver` 可插拔（MVP：`mock`） |
 | 配置 | YAML + 热更新；密钥用 env 名引用 |
 | 主前端 | Vue3 + Vue Router + Pinia + Axios（pnpm） |
-| 可观测 | 自研 `traceService`（FastAPI + Vue3 + SQLite）；全链路 `trace_id` |
+| 可观测 | 自研 `traceService`（FastAPI + **Python Worker** + **Go Worker** + Vue3 + Redis + SQLite）；全链路 `trace_id` |
 
 ---
 
@@ -46,12 +43,10 @@ AIDramastic/
 
 | 文档 | 说明 |
 |------|------|
-| [`docs/prd-20260927-init-service/PRD.md`](docs/prd-20260927-init-service/PRD.md) | 产品背景、服务拆分、协议与数据模型 |
-| [`docs/prd-20260927-init-service/CODING_STANDARDS.md`](docs/prd-20260927-init-service/CODING_STANDARDS.md) | 错误处理、分层、测试等工程细节 |
-| [`docs/prd-20260927-init-service/TODO.md`](docs/prd-20260927-init-service/TODO.md) | MVP 脚手架落地 Checklist |
-| [`AGENTS.md`](AGENTS.md) | **编码与工程宪法**（Agent 必读；与 CODING_STANDARDS 冲突时产品级约定以本文件优先说明） |
-| [`traceService/README.md`](traceService/README.md) | 轻量 Trace / 日志查询子系统 |
-| [`traceService/docs/PLAN.md`](traceService/docs/PLAN.md) | traceService 开发计划 |
+| [`docs/prd-20260927-init-service/`](docs/prd-20260927-init-service/) | MVP 文档集：BACKGROUND / PRD / DESIGN / CODING_STANDARDS / TODO |
+| [`AGENTS.md`](AGENTS.md) | **编码与工程宪法**（§J 存储；**§K 队列与 Worker**） |
+| [`traceService/README.md`](traceService/README.md) | 可观测子系统（FastAPI + Python Worker + Go Worker + Redis + SQLite） |
+| [`traceService/docs/`](traceService/docs/) | PRD / DESIGN / ARCHITECTURE / PLAN / TODO |
 
 ---
 
@@ -66,8 +61,8 @@ AIDramastic/
 1. `docker compose up -d`（MySQL + Redis，若使用）
 2. 复制 `.env.example` → `.env`，填入 `MYSQL_DSN` / `REDIS_ADDR` / `JWT_SECRET` 等
 3. `make gen` 生成 protobuf
-4. 启动后端（顺序可并行，建议先下游）：`user-svc` → `drama-svc` → `ai-svc` → `gateway`
-5. （可选并行）启动 `traceService` 后端与其 Web，用于按 `trace_id` 查日志
+4. 启动后端（顺序可并行，建议先下游）：`user-svc` → `drama-svc` → `ai-svc`（**API + Worker**）→ `gateway`
+5. （可选并行）启动 `traceService`：FastAPI + **Python Worker** + **Go Worker** + Web，用于按 `trace_id` 查日志
 6. `cd web && pnpm install && pnpm dev`
 
 默认端口与确切二进制命令以 configs / Makefile 落地为准。
@@ -78,8 +73,10 @@ AIDramastic/
 
 - **所有** HTTP / gRPC 请求必须传播 `trace_id`（客户端可传 `X-Trace-Id`；缺失则由 gateway/入口生成 UUID）。
 - 结构化日志每条带 `trace_id`、`service`、`level`、`msg`、时间；推荐 JSON 一行一条。
-- 查日志：打开 **traceService** Web，输入 `trace_id`，查看跨服务时间线。
-- 约定与上报方式见根目录 [`AGENTS.md`](AGENTS.md) 与 [`traceService/README.md`](traceService/README.md)。**禁止**依赖 Jaeger/ELK 才能本地开发。
+- 查日志：打开 **traceService** Web，输入 `trace_id`，查看跨服务时间线（Redis 缓存 → SQLite）。
+- 上报：异步 HTTP ingest → `trace:ingest` → Python Worker → `trace:persist` → Go Worker 写 SQLite；**不阻塞**主业务请求。
+- 存储边界：主业务 **MySQL**；trace **SQLite**（见 [`AGENTS.md`](AGENTS.md) §J）。队列见 **§K**。
+- 约定见 [`AGENTS.md`](AGENTS.md) 与 [`traceService/README.md`](traceService/README.md)。**禁止**依赖 Jaeger/ELK 才能本地开发。
 
 ---
 
