@@ -1,0 +1,10 @@
+redis:
+  addr_env: REDIS_ADDR
+  ingest_queue_key: "trace:ingest"
+  persist_queue_key: "trace:persist"
+  queue_type: "stream"
+  group: "trace-ingest-workers"
+  consumer: "py-worker-1"
+normalize:
+  max_batch: 100
+  flush_interval_ms: 50
