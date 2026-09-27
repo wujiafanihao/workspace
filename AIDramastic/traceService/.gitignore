@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+.env
+.env.*
+!.env.example
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+.Python
+pip-wheel-metadata/
+
+# Vue / Node
+node_modules/
+.pnpm-store/
+dist/
+*.local
+.DS_Store
+
+# DB / 本地数据
+*.db
+*.sqlite3
+data/
+logs/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# 构建与覆盖率
+htmlcov/
+.coverage
+coverage.xml

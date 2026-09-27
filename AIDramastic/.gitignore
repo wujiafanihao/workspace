@@ -1,0 +1,67 @@
+# --- Go ---
+bin/
+dist/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+coverage
+coverage.*
+vendor/
+tmp/
+*.log
+
+# IDE（保留 .vscode 可选：默认忽略本地个人配置；团队共享 settings 可强制添加 -f）
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# --- Node / web ---
+node_modules/
+.pnpm-store/
+*.local
+web/dist/
+**/dist/
+
+# --- Python / traceService ---
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+.env
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+.Python
+
+# --- 环境与密钥 ---
+.env
+.env.*
+!.env.example
+*.pem
+secrets/
+*.key
+
+# --- 系统 ---
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# --- 本地日志与构建产物 ---
+logs/
+*.sqlite3
+*.db
+
+# --- 本地配置（示例 yaml 应提交） ---
+configs/local.yaml
+configs/**/local.yaml
+**/configs/local.yaml
+
+# 注意：不要忽略 docs/、protocol 源 proto、configs/*.example.yaml
