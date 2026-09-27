@@ -16,5 +16,5 @@
 - [ ] worker_py: password, no-ack-on-fail
 - [x] backend: stream_maxlen on ingest XADD
 - [ ] backend: password encode, strip, validation JSON, enqueue notes
-- [ ] mq.sh build + pgid
+- [x] mq.sh build + pgid
 - [ ] 测试 + check → archive

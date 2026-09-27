@@ -41,23 +41,37 @@ start_go() {
     echo "worker_go already running pid=$(cat "$GO_PID")"
     return
   fi
+  mkdir -p "$ROOT/worker/bin"
   cd "$ROOT/worker"
   # sqlite 默认相对路径：与 backend/data 对齐
   export TRACE_SQLITE_PATH="${TRACE_SQLITE_PATH:-$ROOT/backend/data/logs.db}"
-  nohup go run ./cmd/worker -config "$ROOT/worker/configs/default.yaml" >>"$GO_LOG" 2>&1 &
+  go build -o "$ROOT/worker/bin/worker" ./cmd/worker
+  if command -v setsid >/dev/null 2>&1; then
+    nohup setsid "$ROOT/worker/bin/worker" -config "$ROOT/worker/configs/default.yaml" >>"$GO_LOG" 2>&1 &
+  else
+    nohup "$ROOT/worker/bin/worker" -config "$ROOT/worker/configs/default.yaml" >>"$GO_LOG" 2>&1 &
+  fi
   echo $! >"$GO_PID"
   echo "started worker_go pid=$(cat "$GO_PID")"
 }
 
 stop_one() {
-  local pidfile=$1 name=$2
+  local pidfile=$1 name=$2 group=${3:-false}
   if [ -f "$pidfile" ]; then
     local pid
     pid="$(cat "$pidfile")"
     if kill -0 "$pid" 2>/dev/null; then
-      kill "$pid" 2>/dev/null || true
-      sleep 0.5
-      kill -9 "$pid" 2>/dev/null || true
+      if [ "$group" = true ]; then
+        kill -TERM -- "-$pid" 2>/dev/null || kill -TERM "-$pid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null || true
+        sleep 0.5
+        if kill -0 "$pid" 2>/dev/null; then
+          kill -KILL -- "-$pid" 2>/dev/null || kill -KILL "-$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null || true
+        fi
+      else
+        kill "$pid" 2>/dev/null || true
+        sleep 0.5
+        kill -9 "$pid" 2>/dev/null || true
+      fi
       echo "stopped $name pid=$pid"
     else
       echo "$name not running (stale pidfile)"
@@ -80,7 +94,7 @@ status_one() {
 cmd="${1:-status}"
 case "$cmd" in
   start) start_py; start_go ;;
-  stop) stop_one "$PY_PID" worker_py; stop_one "$GO_PID" worker_go ;;
+  stop) stop_one "$PY_PID" worker_py; stop_one "$GO_PID" worker_go true ;;
   restart) "$0" stop; "$0" start ;;
   status) status_one "$PY_PID" worker_py; status_one "$GO_PID" worker_go ;;
   *) echo "usage: $0 start|stop|status|restart"; exit 1 ;;
