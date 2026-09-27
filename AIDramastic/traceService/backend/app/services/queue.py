@@ -74,6 +74,8 @@ async def enqueue_logs(
                 await client.xadd(
                     key,
                     {"payload": json.dumps(item, ensure_ascii=False)},
+                    maxlen=cfg.stream_maxlen,
+                    approximate=True,
                 )
                 accepted += 1
     except BizError:

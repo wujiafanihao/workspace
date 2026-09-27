@@ -21,6 +21,7 @@ DEFAULT_INGEST_KEY: str = "trace:ingest"
 DEFAULT_CACHE_PREFIX: str = "trace:"
 DEFAULT_CACHE_TTL_SEC: int = 60
 DEFAULT_QUEUE_SOFT_LIMIT: int = 100_000
+DEFAULT_STREAM_MAXLEN: int = 100_000  # XADD ~ MAXLEN；默认与 soft_limit 同量级
 DEFAULT_MAX_BATCH: int = 500
 
 # SQLite 只读 URI 查询参数

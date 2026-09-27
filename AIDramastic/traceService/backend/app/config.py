@@ -20,6 +20,7 @@ from app.constants import (
     DEFAULT_INGEST_KEY,
     DEFAULT_MAX_BATCH,
     DEFAULT_QUEUE_SOFT_LIMIT,
+    DEFAULT_STREAM_MAXLEN,
     DEFAULT_QUEUE_TYPE,
     DEFAULT_REDIS_ADDR,
 )
@@ -41,6 +42,7 @@ class RedisConfig:
     cache_prefix: str = DEFAULT_CACHE_PREFIX
     cache_ttl_sec: int = DEFAULT_CACHE_TTL_SEC
     queue_soft_limit: int = DEFAULT_QUEUE_SOFT_LIMIT
+    stream_maxlen: int = DEFAULT_STREAM_MAXLEN  # XADD approximate MAXLEN
 
 
 @dataclass
@@ -109,6 +111,12 @@ def load_config(path: str | Path | None = None) -> AppConfig:
     if not Path(sqlite_path).is_absolute():
         sqlite_path = str((cfg_path.parent.parent / sqlite_path).resolve())
 
+    queue_soft_limit = int(
+        redis_raw.get("queue_soft_limit", DEFAULT_QUEUE_SOFT_LIMIT)
+    )
+    # stream_maxlen 未配置时与 soft_limit 对齐，避免 XLEN 永不回落
+    stream_maxlen = int(redis_raw.get("stream_maxlen", queue_soft_limit))
+
     return AppConfig(
         server=ServerConfig(
             host=str(server_raw.get("host", "127.0.0.1")),
@@ -126,9 +134,8 @@ def load_config(path: str | Path | None = None) -> AppConfig:
             queue_type=str(redis_raw.get("queue_type", DEFAULT_QUEUE_TYPE)),
             cache_prefix=str(redis_raw.get("cache_prefix", DEFAULT_CACHE_PREFIX)),
             cache_ttl_sec=int(redis_raw.get("cache_ttl_sec", DEFAULT_CACHE_TTL_SEC)),
-            queue_soft_limit=int(
-                redis_raw.get("queue_soft_limit", DEFAULT_QUEUE_SOFT_LIMIT)
-            ),
+            queue_soft_limit=queue_soft_limit,
+            stream_maxlen=stream_maxlen,
         ),
         sqlite=SqliteConfig(path=sqlite_path),
         cors=CorsConfig(origins=list(cors_raw.get("origins") or CorsConfig().origins)),

@@ -7,7 +7,7 @@
 - [x] flush/关机
 - [x] ACK
 - [ ] list 可靠
-- [ ] MAXLEN
+- [x] MAXLEN
 - [ ] TRACE_SQLITE_PATH
 - [ ] mq.sh pid
 - [ ] password encode

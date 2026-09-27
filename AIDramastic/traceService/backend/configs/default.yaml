@@ -10,6 +10,7 @@ redis:
   cache_prefix: "trace:"
   cache_ttl_sec: 60
   queue_soft_limit: 100000
+  stream_maxlen: 100000       # XADD MAXLEN ~；默认与 soft_limit 对齐
 sqlite:
   path: "./data/logs.db"    # API 只读打开同一文件
 cors:

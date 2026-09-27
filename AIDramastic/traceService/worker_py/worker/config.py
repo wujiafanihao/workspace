@@ -14,7 +14,7 @@ from typing import Any
 
 import yaml
 
-from worker.constants import DEFAULT_REDIS_ADDR
+from worker.constants import DEFAULT_REDIS_ADDR, DEFAULT_STREAM_MAXLEN
 
 
 @dataclass
@@ -28,6 +28,7 @@ class RedisCfg:
     consumer: str = "py-worker-1"
     claim_min_idle_ms: int = 60000  # PEL 最小空闲毫秒，XAUTOCLAIM min_idle_time
     claim_count: int = 0  # 每次 claim 条数；<=0 则用 max_batch
+    stream_maxlen: int = DEFAULT_STREAM_MAXLEN  # XADD approximate MAXLEN
 
 
 @dataclass
@@ -70,6 +71,7 @@ def load_config(path: str | Path | None = None) -> WorkerConfig:
             consumer=str(r.get("consumer", "py-worker-1")),
             claim_min_idle_ms=claim_min_idle_ms,
             claim_count=claim_count,
+            stream_maxlen=int(r.get("stream_maxlen", DEFAULT_STREAM_MAXLEN)),
         ),
         normalize=NormalizeCfg(
             max_batch=int(n.get("max_batch", 100)),

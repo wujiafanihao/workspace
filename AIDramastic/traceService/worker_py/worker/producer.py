@@ -31,7 +31,12 @@ async def enqueue_persist(
         if cfg.queue_type == "list":
             await client.lpush(key, payload)
         else:
-            await client.xadd(key, {"payload": payload})
+            await client.xadd(
+                key,
+                {"payload": payload},
+                maxlen=cfg.stream_maxlen,
+                approximate=True,
+            )
         n += 1
         log.info("enqueued persist", extra={"trace_id": item.get("trace_id")})
     return n
