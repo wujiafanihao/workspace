@@ -96,6 +96,15 @@ func Load(path string) (*Config, error) {
 		workerRoot := filepath.Dir(filepath.Dir(absPath))
 		cfg.Sqlite.Path = filepath.Clean(filepath.Join(workerRoot, cfg.Sqlite.Path))
 	}
+	if sqlitePath := os.Getenv("TRACE_SQLITE_PATH"); sqlitePath != "" {
+		cfg.Sqlite.Path = sqlitePath
+		if !filepath.IsAbs(cfg.Sqlite.Path) {
+			cfg.Sqlite.Path, err = filepath.Abs(cfg.Sqlite.Path)
+			if err != nil {
+				return nil, fmt.Errorf("abs sqlite path: %w", err)
+			}
+		}
+	}
 	if cfg.Sqlite.BusyTimeoutMs <= 0 {
 		cfg.Sqlite.BusyTimeoutMs = 5000
 	}
