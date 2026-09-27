@@ -1,40 +1,34 @@
-# Python
+# data & logs
+data/*
+!data/openapi.json
+*.db
+*.db-*
+log/*.log
+log/*.pid
+!log/.gitkeep
+
+# python
 __pycache__/
 *.py[cod]
-*$py.class
 .venv/
 venv/
-.env
-.env.*
-!.env.example
+*.egg-info/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
-*.egg-info/
-.Python
-pip-wheel-metadata/
 
-# Vue / Node
-node_modules/
-.pnpm-store/
-dist/
-*.local
-.DS_Store
-
-# DB / 本地数据
-*.db
-*.sqlite3
-data/
-logs/
-
-# IDE
-.idea/
-.vscode/
-*.swp
-
-# 构建与覆盖率
-htmlcov/
-.coverage
-coverage.xml
+# go
 worker/bin/
 worker/worker
+*.exe
+*.test
+
+# env / secrets
+.env
+.env.*
+!.env.example
+
+# ide / os
+.DS_Store
+.idea/
+.vscode/

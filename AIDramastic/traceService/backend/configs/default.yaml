@@ -1,0 +1,21 @@
+server:
+  host: "127.0.0.1"
+  port: 8100
+redis:
+  addr_env: REDIS_ADDR      # 默认 127.0.0.1:6379
+  password_env: REDIS_PASSWORD
+  ingest_queue_key: "trace:ingest"
+  persist_queue_key: "trace:persist"   # API 不消费；仅文档对齐
+  queue_type: "stream"       # stream | list
+  cache_prefix: "trace:"
+  cache_ttl_sec: 60
+  queue_soft_limit: 100000
+  stream_maxlen: 100000       # XADD MAXLEN ~；默认与 soft_limit 对齐
+sqlite:
+  path: "./data/logs.db"    # API 只读打开同一文件
+cors:
+  origins:
+    - "http://127.0.0.1:5174"
+    - "http://localhost:5174"
+ingest:
+  max_batch: 500

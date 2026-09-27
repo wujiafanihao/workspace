@@ -1,0 +1,13 @@
+redis:
+  addr_env: REDIS_ADDR
+  ingest_queue_key: "trace:ingest"
+  persist_queue_key: "trace:persist"
+  queue_type: "stream"
+  group: "trace-ingest-workers"
+  consumer: "py-worker-1"
+  claim_min_idle_ms: 60000
+  stream_maxlen: 100000       # persist XADD MAXLEN ~
+  # claim_count: 0  # 未设则用 max_batch
+normalize:
+  max_batch: 100
+  flush_interval_ms: 50

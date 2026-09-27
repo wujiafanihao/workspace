@@ -1,0 +1,16 @@
+redis:
+  addr_env: REDIS_ADDR
+  queue_key: "trace:persist"
+  queue_type: "stream"
+  group: "trace-persist-workers"
+  consumer: "go-worker-1"
+  claim_min_idle_ms: 60000
+  # claim_count: 0  # 未设则用 batch_size
+sqlite:
+  path: "../backend/data/logs.db"
+  busy_timeout_ms: 5000
+  batch_size: 100
+  flush_interval_ms: 100
+cache:
+  prefix: "trace:"
+  invalidate_mode: "delete"
