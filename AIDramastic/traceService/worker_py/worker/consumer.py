@@ -1,6 +1,6 @@
-"""consumer.py — 消费 trace:ingest（XREADGROUP / XAUTOCLAIM / BRPOP）。
+"""consumer.py — 消费 trace:ingest（XREADGROUP / XAUTOCLAIM / BLMOVE list）。
 
-负责：确保消费者组、循环读取、ACK、调用 normalize + producer。
+负责：确保消费者组、循环读取、ACK/LREM、调用 normalize + producer。
 不负责：写 SQLite。
 依赖：redis.asyncio；normalize；producer。
 """
@@ -19,6 +19,12 @@ from worker.normalize import normalize_item
 from worker.producer import enqueue_persist
 
 log = get_logger(__name__)
+
+
+
+def processing_key(queue_key: str) -> str:
+    """可靠 list 队列的 processing 侧键：queue_key + ":processing"。"""
+    return f"{queue_key}:processing"
 
 
 def _redis_url(cfg: WorkerConfig) -> str:
@@ -98,6 +104,8 @@ class Consumer:
         )
         client = self._client
         await ensure_group(client, self.cfg)
+        if self.cfg.redis.queue_type == "list":
+            await self._requeue_processing(client)
         log.info("worker_py started")
         try:
             while not self._stop.is_set():
@@ -165,17 +173,41 @@ class Consumer:
             fresh.extend(messages)
         await self._ingest_and_ack(client, fresh)
 
+    async def _requeue_processing(self, client: aioredis.Redis) -> None:
+        """将 processing 中未完成项全部回队到主 list（崩溃恢复）。"""
+        src = self.cfg.redis.ingest_queue_key
+        pk = processing_key(src)
+        while True:
+            moved = await client.rpoplpush(pk, src)
+            if moved is None:
+                return
+
+    async def _move_to_processing(self, client: aioredis.Redis) -> str | None:
+        """原子地从主 list 移到 processing（BLMOVE；未知命令回退 BRPOPLPUSH）。"""
+        src = self.cfg.redis.ingest_queue_key
+        dst = processing_key(src)
+        try:
+            return await client.blmove(src, dst, timeout=1, src="RIGHT", dest="LEFT")
+        except Exception as exc:
+            msg = str(exc).lower()
+            if "unknown command" in msg or "err unknown" in msg:
+                return await client.brpoplpush(src, dst, timeout=1)
+            raise
+
     async def _consume_list(self, client: aioredis.Redis) -> None:
-        """BRPOP 单条（简化）。"""
-        item = await client.brpop(self.cfg.redis.ingest_queue_key, timeout=1)
-        if not item:
+        """BLMOVE/BRPOPLPUSH 到 processing，成功 enqueue_persist 后 LREM。"""
+        raw = await self._move_to_processing(client)
+        if not raw:
             await asyncio.sleep(0.05)
             return
-        _key, raw = item
+        dst = processing_key(self.cfg.redis.ingest_queue_key)
         try:
             data = json.loads(raw)
         except json.JSONDecodeError:
+            await client.lrem(dst, 1, raw)
             return
         norm = normalize_item(data) if isinstance(data, dict) else None
         if norm:
             await enqueue_persist(client, self.cfg.redis, [norm])
+        # 成功入队或无需入队（坏包已丢弃 / normalize 为空）后从 processing 移除
+        await client.lrem(dst, 1, raw)

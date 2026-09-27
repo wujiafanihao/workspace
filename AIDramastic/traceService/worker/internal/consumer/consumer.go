@@ -1,5 +1,5 @@
 // Package consumer 消费 trace:persist 并批量落库。
-// 负责：XREADGROUP/XAUTOCLAIM/BRPOP、批缓冲、调用 writer + cache。
+// 负责：XREADGROUP/XAUTOCLAIM/BLMOVE(list)、批缓冲、调用 writer + cache。
 // 不负责：HTTP。依赖：go-redis、writer、cache。
 package consumer
 
@@ -23,9 +23,11 @@ type Runner struct {
 	w       *writer.Writer
 	inv     *cache.Invalidator
 	buf     []writer.LogRow
-	pending []string // stream message ids；仅在 XAck 成功后清空
+	pending []string // stream: msg ids；list: raw payloads；完成确认后清空
 	// xAck 可选；单测注入失败/成功行为。nil 时走 rdb.XAck。
 	xAck func(ctx context.Context, ids ...string) error
+	// lRem 可选；单测注入。nil 时走 rdb.LRem（list processing 完成确认）。
+	lRem func(ctx context.Context, key string, count int64, value string) error
 }
 
 // New 构造 Runner。
@@ -81,6 +83,11 @@ func (r *Runner) flushOnShutdown() error {
 func (r *Runner) Run(ctx context.Context) error {
 	if err := r.ensureGroup(ctx); err != nil {
 		return fmt.Errorf("ensure group: %w", err)
+	}
+	if r.cfg.Redis.QueueType == "list" {
+		if err := r.requeueProcessing(ctx); err != nil {
+			return fmt.Errorf("requeue processing: %w", err)
+		}
 	}
 	wlog.Info("go worker started", "", map[string]any{"queue": r.cfg.Redis.QueueKey})
 	ticker := time.NewTicker(time.Duration(r.cfg.Sqlite.FlushIntervalMs) * time.Millisecond)
@@ -223,22 +230,58 @@ func (r *Runner) pollStream(ctx context.Context) error {
 	return nil
 }
 
+// requeueProcessing 将 processing 列表中未完成项全部回队到主 list（崩溃恢复）。
+func (r *Runner) requeueProcessing(ctx context.Context) error {
+	pk := config.ProcessingKey(r.cfg.Redis.QueueKey)
+	for {
+		_, err := r.rdb.RPopLPush(ctx, pk, r.cfg.Redis.QueueKey).Result()
+		if err == redis.Nil {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+	}
+}
+
+// moveToProcessing 原子地从主 list 移到 processing（BLMOVE；失败回退 BRPOPLPUSH）。
+func (r *Runner) moveToProcessing(ctx context.Context, timeout time.Duration) (string, error) {
+	src := r.cfg.Redis.QueueKey
+	dst := config.ProcessingKey(src)
+	val, err := r.rdb.BLMove(ctx, src, dst, "RIGHT", "LEFT", timeout).Result()
+	if err != nil && contains(err.Error(), "unknown command") {
+		return r.rdb.BRPopLPush(ctx, src, dst, timeout).Result()
+	}
+	return val, err
+}
+
+func (r *Runner) lremProcessing(ctx context.Context, payload string) error {
+	pk := config.ProcessingKey(r.cfg.Redis.QueueKey)
+	if r.lRem != nil {
+		return r.lRem(ctx, pk, 1, payload)
+	}
+	return r.rdb.LRem(ctx, pk, 1, payload).Err()
+}
+
 func (r *Runner) pollList(ctx context.Context) error {
-	val, err := r.rdb.BRPop(ctx, time.Second, r.cfg.Redis.QueueKey).Result()
+	payload, err := r.moveToProcessing(ctx, time.Second)
 	if err == redis.Nil {
 		return nil
 	}
 	if err != nil {
 		return err
 	}
-	if len(val) < 2 {
+	if payload == "" {
 		return nil
 	}
-	row, err := writer.ParsePayload(val[1])
+	row, err := writer.ParsePayload(payload)
 	if err != nil {
+		// 坏包：从 processing 丢弃，避免启动回队死循环
+		_ = r.lremProcessing(ctx, payload)
 		return nil
 	}
 	r.buf = append(r.buf, row)
+	r.pending = append(r.pending, payload)
 	if len(r.buf) >= r.cfg.Sqlite.BatchSize {
 		return r.flush(ctx)
 	}
@@ -273,6 +316,16 @@ func (r *Runner) flush(ctx context.Context) error {
 			})
 			// SQLite 已用 redis_msg_id 幂等写入；不清空 buf/pending，下次 flush 安全重试
 			return fmt.Errorf("xack: %w", err)
+		}
+	}
+	if r.cfg.Redis.QueueType == "list" && len(r.pending) > 0 {
+		for _, payload := range r.pending {
+			if err := r.lremProcessing(ctx, payload); err != nil {
+				wlog.Error("lrem processing failed; keeping pending for retry", "", map[string]any{
+					"err": err.Error(), "pending": len(r.pending),
+				})
+				return fmt.Errorf("lrem: %w", err)
+			}
 		}
 	}
 	for _, id := range ids {

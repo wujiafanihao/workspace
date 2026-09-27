@@ -8,3 +8,10 @@ func TestCacheKey(t *testing.T) {
 		t.Fatalf("got %s", got)
 	}
 }
+
+func TestProcessingKey(t *testing.T) {
+	got := ProcessingKey("trace:persist")
+	if got != "trace:persist:processing" {
+		t.Fatalf("got %s", got)
+	}
+}

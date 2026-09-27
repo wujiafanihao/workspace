@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 
 from worker.config import NormalizeCfg, RedisCfg, WorkerConfig
-from worker.consumer import Consumer, process_stream_messages
+from worker.consumer import Consumer, process_stream_messages, processing_key
 
 
 def _good_payload(**overrides: object) -> str:
@@ -50,3 +50,8 @@ def test_claim_count_defaults_to_max_batch():
     assert c.claim_count() == 42
     c.cfg.redis.claim_count = 7
     assert c.claim_count() == 7
+
+
+def test_processing_key():
+    assert processing_key("trace:ingest") == "trace:ingest:processing"
+    assert processing_key("q") == "q:processing"

@@ -118,3 +118,8 @@ func Load(path string) (*Config, error) {
 func CacheKey(prefix, traceID string) string {
 	return prefix + traceID
 }
+
+// ProcessingKey 返回可靠 list 队列的 processing 侧键：queueKey + ":processing"。
+func ProcessingKey(queueKey string) string {
+	return queueKey + ":processing"
+}

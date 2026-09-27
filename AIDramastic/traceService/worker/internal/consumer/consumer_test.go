@@ -168,3 +168,74 @@ func TestFlushClearsPendingOnAckSuccess(t *testing.T) {
 		t.Fatalf("buf=%d pending=%v", len(r.buf), r.pending)
 	}
 }
+
+func TestFlushLRemOnListSuccess(t *testing.T) {
+	dir := t.TempDir()
+	w, err := writer.Open(config.SqliteConfig{
+		Path:          filepath.Join(dir, "t.db"),
+		BusyTimeoutMs: 1000,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+
+	payload := `{"trace_id":"t1","service":"s","level":"INFO","message":"m","timestamp":"ts"}`
+	var gotKey string
+	var gotCount int64
+	var gotVal string
+	calls := 0
+	r := &Runner{
+		cfg: &config.Config{Redis: config.RedisConfig{QueueType: "list", QueueKey: "trace:persist"}},
+		w:   w,
+		buf: []writer.LogRow{{
+			TraceID: "t1", Service: "s", Level: "INFO", Message: "m", Timestamp: "ts",
+		}},
+		pending: []string{payload},
+		lRem: func(ctx context.Context, key string, count int64, value string) error {
+			calls++
+			gotKey, gotCount, gotVal = key, count, value
+			return nil
+		},
+	}
+	if err := r.flush(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 1 || gotKey != "trace:persist:processing" || gotCount != 1 || gotVal != payload {
+		t.Fatalf("lrem calls=%d key=%s count=%d val=%q", calls, gotKey, gotCount, gotVal)
+	}
+	if len(r.buf) != 0 || len(r.pending) != 0 {
+		t.Fatalf("buf=%d pending=%v", len(r.buf), r.pending)
+	}
+}
+
+func TestFlushKeepsPendingOnListLRemFailure(t *testing.T) {
+	dir := t.TempDir()
+	w, err := writer.Open(config.SqliteConfig{
+		Path:          filepath.Join(dir, "t.db"),
+		BusyTimeoutMs: 1000,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+
+	payload := `{"trace_id":"t1","service":"s","level":"INFO","message":"m","timestamp":"ts"}`
+	r := &Runner{
+		cfg: &config.Config{Redis: config.RedisConfig{QueueType: "list", QueueKey: "q"}},
+		w:   w,
+		buf: []writer.LogRow{{
+			TraceID: "t1", Service: "s", Level: "INFO", Message: "m", Timestamp: "ts",
+		}},
+		pending: []string{payload},
+		lRem: func(ctx context.Context, key string, count int64, value string) error {
+			return errors.New("redis down")
+		},
+	}
+	if err := r.flush(context.Background()); err == nil {
+		t.Fatal("expected lrem error")
+	}
+	if len(r.buf) != 1 || len(r.pending) != 1 || r.pending[0] != payload {
+		t.Fatalf("should keep buf/pending: buf=%d pending=%v", len(r.buf), r.pending)
+	}
+}
