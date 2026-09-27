@@ -36,7 +36,13 @@ async def enqueue_logs(
 
     入参：client Redis；cfg 队列配置；items 已校验字典列表。
     出参：成功入队条数。
-    副作用：XADD/LPUSH；超 soft_limit 抛 BizError(50301)；Redis 异常同码。
+    副作用：pipeline XADD/LPUSH；超 soft_limit 抛 BizError(50301)；Redis 异常同码。
+
+    批量入队走 Redis pipeline，减少往返并尽量一次落地。pipeline execute
+    失败时 Redis 侧仍可能已写入部分条目（at-least-once，非 MULTI 事务语义），
+    因此不返回部分成功 HTTP；客户端须容忍重复、消费者须幂等（stream 侧
+    persist 已有 redis_msg_id）。失败时 BizError.data 带 enqueued_before_error
+    供观测（execute 未返回时为 0，实际落库数可能 >0）。
     """
     if not items:
         return 0
@@ -63,25 +69,40 @@ async def enqueue_logs(
     accepted = 0
     key = cfg.ingest_queue_key
     try:
+        # transaction=False：一次往返批量发出；非 MULTI/EXEC，失败仍可能部分写入。
+        pipe = client.pipeline(transaction=False)
         if cfg.queue_type == "list":
             for item in items:
                 payload = json.dumps(item, ensure_ascii=False)
-                await client.lpush(key, payload)
-                accepted += 1
+                pipe.lpush(key, payload)
         else:
             for item in items:
                 # Stream：整条 JSON 放 payload 字段，便于跨语言消费
-                await client.xadd(
+                pipe.xadd(
                     key,
                     {"payload": json.dumps(item, ensure_ascii=False)},
                     maxlen=cfg.stream_maxlen,
                     approximate=True,
                 )
-                accepted += 1
+        results = await pipe.execute()
+        accepted = len(results) if results is not None else len(items)
     except BizError:
         raise
     except Exception as exc:
-        log.error("enqueue failed", extra={"fields": {"err": str(exc)}})
-        raise BizError(ErrorCode.QUEUE_UNAVAILABLE, message="enqueue failed") from exc
+        log.error(
+            "enqueue failed",
+            extra={
+                "fields": {
+                    "err": str(exc),
+                    "enqueued_before_error": accepted,
+                    "attempted": len(items),
+                }
+            },
+        )
+        raise BizError(
+            ErrorCode.QUEUE_UNAVAILABLE,
+            message="enqueue failed",
+            data={"enqueued_before_error": accepted, "attempted": len(items)},
+        ) from exc
 
     return accepted

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import fakeredis.aioredis
@@ -72,13 +73,20 @@ async def test_enqueue_stream_passes_maxlen(fake_redis, monkeypatch):
         stream_maxlen=42,
     )
     calls: list[dict] = []
-    real_xadd = fake_redis.xadd
+    real_pipeline = fake_redis.pipeline
 
-    async def spy_xadd(*args, **kwargs):
-        calls.append({"args": args, "kwargs": kwargs})
-        return await real_xadd(*args, **kwargs)
+    def spy_pipeline(*args, **kwargs):
+        pipe = real_pipeline(*args, **kwargs)
+        real_xadd = pipe.xadd
 
-    monkeypatch.setattr(fake_redis, "xadd", spy_xadd)
+        def spy_xadd(*a, **kw):
+            calls.append({"args": a, "kwargs": kw})
+            return real_xadd(*a, **kw)
+
+        pipe.xadd = spy_xadd
+        return pipe
+
+    monkeypatch.setattr(fake_redis, "pipeline", spy_pipeline)
     n = await queue_svc.enqueue_logs(
         fake_redis,
         cfg,
@@ -106,3 +114,65 @@ async def test_enqueue_stream_maxlen_trims(fake_redis):
             [{"trace_id": f"t{i}", "service": "s", "level": "I", "message": "m", "timestamp": "t", "fields": {}}],
         )
     assert await fake_redis.xlen("trace:ingest") <= 3
+
+
+@pytest.mark.asyncio
+async def test_enqueue_uses_pipeline_batch(fake_redis, monkeypatch):
+    """批量入队应走 pipeline（一次 execute），而非逐条 await。"""
+    cfg = RedisConfig(queue_type="stream", ingest_queue_key="trace:ingest", queue_soft_limit=100)
+    items = [
+        {"trace_id": f"t{i}", "service": "s", "level": "I", "message": "m", "timestamp": "t", "fields": {}}
+        for i in range(3)
+    ]
+    pipeline_calls: list[dict] = []
+    execute_calls: list[int] = []
+    real_pipeline = fake_redis.pipeline
+
+    def spy_pipeline(*args, **kwargs):
+        pipeline_calls.append({"args": args, "kwargs": kwargs})
+        pipe = real_pipeline(*args, **kwargs)
+        real_execute = pipe.execute
+
+        async def spy_execute(*a, **kw):
+            execute_calls.append(1)
+            return await real_execute(*a, **kw)
+
+        pipe.execute = spy_execute
+        return pipe
+
+    monkeypatch.setattr(fake_redis, "pipeline", spy_pipeline)
+    n = await queue_svc.enqueue_logs(fake_redis, cfg, items)
+    assert n == 3
+    assert len(pipeline_calls) == 1
+    assert pipeline_calls[0]["kwargs"].get("transaction") is False
+    assert len(execute_calls) == 1
+    assert await fake_redis.xlen("trace:ingest") == 3
+
+
+@pytest.mark.asyncio
+async def test_enqueue_pipeline_failure_raises_with_enqueued_before_error(fake_redis, monkeypatch):
+    """pipeline execute 失败时抛 QUEUE_UNAVAILABLE，data 含 enqueued_before_error。"""
+    cfg = RedisConfig(queue_type="list", ingest_queue_key="trace:ingest", queue_soft_limit=100)
+    items = [
+        {"trace_id": "t1", "service": "s", "level": "I", "message": "m", "timestamp": "t", "fields": {}},
+        {"trace_id": "t2", "service": "s", "level": "I", "message": "m", "timestamp": "t", "fields": {}},
+    ]
+
+    real_pipeline = fake_redis.pipeline
+
+    def boom_pipeline(*args, **kwargs):
+        pipe = real_pipeline(*args, **kwargs)
+
+        async def fail_execute(*a, **kw):
+            raise ConnectionError("redis down mid-pipeline")
+
+        pipe.execute = fail_execute
+        return pipe
+
+    monkeypatch.setattr(fake_redis, "pipeline", boom_pipeline)
+    with pytest.raises(BizError) as ei:
+        await queue_svc.enqueue_logs(fake_redis, cfg, items)
+    assert ei.value.code == ErrorCode.QUEUE_UNAVAILABLE
+    assert ei.value.data is not None
+    assert ei.value.data.get("enqueued_before_error") == 0
+    assert ei.value.data.get("attempted") == 2

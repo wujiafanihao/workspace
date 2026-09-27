@@ -10,6 +10,6 @@
 - [x] MAXLEN
 - [ ] TRACE_SQLITE_PATH
 - [ ] mq.sh pid
-- [ ] password encode
+- [x] password encode
 - [x] validation/strip
 - [ ] cache invalidate

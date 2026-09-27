@@ -57,13 +57,16 @@ async def ensure_group(client: aioredis.Redis, cfg: WorkerConfig) -> None:
 
 def process_stream_messages(
     messages: list[tuple[str, dict[str, Any]]],
-) -> tuple[list[dict[str, Any]], list[str]]:
-    """将 claim/read 得到的消息解析为 (batch, ids)。
+) -> tuple[list[dict[str, Any]], list[str], list[str]]:
+    """将 claim/read 得到的消息解析为 (batch, persist_ids, discard_ids)。
 
-    纯逻辑、不触 Redis，便于单测。非法 payload 仍收集 id（保持现有 ACK-after-enqueue）。
+    纯逻辑、不触 Redis，便于单测。
+    - batch / persist_ids：规范化成功，仅在 enqueue_persist 成功后 ACK。
+    - discard_ids：坏 JSON / normalize 为空（毒丸），可立即 ACK 丢弃。
     """
     batch: list[dict[str, Any]] = []
-    ids: list[str] = []
+    persist_ids: list[str] = []
+    discard_ids: list[str] = []
     for msg_id, fields in messages:
         raw = fields.get("payload") or "{}"
         try:
@@ -73,8 +76,10 @@ def process_stream_messages(
         norm = normalize_item(data) if isinstance(data, dict) else None
         if norm:
             batch.append(norm)
-        ids.append(msg_id)
-    return batch, ids
+            persist_ids.append(msg_id)
+        else:
+            discard_ids.append(msg_id)
+    return batch, persist_ids, discard_ids
 
 
 class Consumer:
@@ -145,14 +150,24 @@ class Consumer:
         client: aioredis.Redis,
         messages: list[tuple[str, dict[str, Any]]],
     ) -> None:
-        """normalize → enqueue_persist → ACK（保持现有 ACK-after-enqueue 行为）。"""
+        """normalize → enqueue_persist → ACK。
+
+        毒丸（discard_ids）立即 ACK；有效条目仅在 enqueue_persist 成功后 ACK。
+        enqueue_persist 失败时不 ACK persist_ids，留给 PEL/XAUTOCLAIM 重试。
+        """
         if not messages:
             return
-        batch, ids = process_stream_messages(messages)
-        if batch:
-            await enqueue_persist(client, self.cfg.redis, batch)
-        if ids:
-            await client.xack(self.cfg.redis.ingest_queue_key, self.cfg.redis.group, *ids)
+        batch, persist_ids, discard_ids = process_stream_messages(messages)
+        key = self.cfg.redis.ingest_queue_key
+        group = self.cfg.redis.group
+        if discard_ids:
+            await client.xack(key, group, *discard_ids)
+        if not batch:
+            return
+        await enqueue_persist(client, self.cfg.redis, batch)
+        # 仅成功入 persist 后 ACK；失败则抛错、不 ACK。
+        if persist_ids:
+            await client.xack(key, group, *persist_ids)
 
     async def _consume_stream(self, client: aioredis.Redis) -> None:
         """先 XAUTOCLAIM 回收 PEL，再 XREADGROUP 读新消息。"""
@@ -196,7 +211,11 @@ class Consumer:
             raise
 
     async def _consume_list(self, client: aioredis.Redis) -> None:
-        """BLMOVE/BRPOPLPUSH 到 processing，成功 enqueue_persist 后 LREM。"""
+        """BLMOVE/BRPOPLPUSH 到 processing；enqueue_persist 成功后才 LREM。
+
+        坏 JSON / normalize 为空：视为毒丸，直接 LREM 丢弃。
+        enqueue_persist 失败：不 LREM，留在 processing 供启动回队重试。
+        """
         raw = await self._move_to_processing(client)
         if not raw:
             await asyncio.sleep(0.05)
@@ -208,7 +227,10 @@ class Consumer:
             await client.lrem(dst, 1, raw)
             return
         norm = normalize_item(data) if isinstance(data, dict) else None
-        if norm:
-            await enqueue_persist(client, self.cfg.redis, [norm])
-        # 成功入队或无需入队（坏包已丢弃 / normalize 为空）后从 processing 移除
+        if not norm:
+            # 毒丸：丢弃
+            await client.lrem(dst, 1, raw)
+            return
+        await enqueue_persist(client, self.cfg.redis, [norm])
+        # 仅成功入 persist 后从 processing 移除
         await client.lrem(dst, 1, raw)

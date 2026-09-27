@@ -13,9 +13,9 @@
 - [x] worker_py: PEL reclaim via XAUTOCLAIM
 - [x] worker_py: list reliable (processing list)
 - [x] worker_py: maxlen (persist XADD ~ MAXLEN)
-- [ ] worker_py: password, no-ack-on-fail
+- [x] worker_py: password, no-ack-on-fail
 - [x] backend: stream_maxlen on ingest XADD
-- [ ] backend: password encode, enqueue notes
+- [x] backend: password encode, enqueue notes
 - [x] backend: strip, validation JSON
 - [x] mq.sh build + pgid
 - [ ] 测试 + check → archive
